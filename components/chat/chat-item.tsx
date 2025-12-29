@@ -1,0 +1,54 @@
+"use client"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import Link from "next/link"; // Quan trọng
+
+interface ChatItemProps {
+  id: string;
+  name: string;
+  avatar?: string;
+  lastMsg: string;
+  time: string;
+  unread: number;
+  isActive: boolean;
+}
+
+export function ChatItem({ id, name, avatar, lastMsg, time, unread, isActive }: ChatItemProps) {
+  return (
+    <Link href={`/messages/${id}`}>
+      <div 
+        className={`flex items-center gap-3 p-3 mx-2 rounded-xl cursor-pointer transition-all ${
+          isActive ? "bg-blue-50/80 shadow-sm" : "hover:bg-slate-50"
+        }`}
+      >
+        <div className="relative">
+          <Avatar className="h-12 w-12 border border-slate-100 shadow-sm">
+            <AvatarImage src={avatar} alt={name} />
+            <AvatarFallback className="bg-slate-200 text-slate-600 font-bold text-xs">
+              {name.substring(0,2).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex justify-between items-baseline mb-0.5">
+            <h4 className={`text-[14.5px] truncate ${isActive ? "text-blue-600 font-bold" : "font-semibold text-slate-900"}`}>
+              {name}
+            </h4>
+            <span className="text-[11px] text-slate-400 font-medium">{time}</span>
+          </div>
+          <div className="flex justify-between items-center">
+            <p className={`text-[13px] truncate pr-2 ${unread > 0 ? "text-slate-900 font-medium" : "text-slate-500"}`}>
+              {lastMsg}
+            </p>
+            {unread > 0 && (
+              <Badge className="bg-blue-600 hover:bg-blue-600 h-5 min-w-[20px] rounded-full text-[10px] flex items-center justify-center p-0">
+                {unread}
+              </Badge>
+            )}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
