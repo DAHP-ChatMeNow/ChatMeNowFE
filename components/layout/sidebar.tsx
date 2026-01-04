@@ -25,13 +25,13 @@ export function Sidebar({ mode = "desktop" }: { mode?: "desktop" | "mobile" }) {
         <Link key={item.path} href={item.path}>
           <div className={`p-2 rounded-xl transition-all relative ${
             isActive(item.path) 
-              ? "text-blue-600 bg-blue-50/80 scale-110 shadow-sm" 
-              : "text-slate-400 hover:text-slate-600"
+              ? "text-blue-600 dark:text-blue-400 bg-blue-50/80 dark:bg-blue-900/30 scale-110 shadow-sm" 
+              : "text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300"
           }`}>
             <item.icon className={mode === "desktop" ? "w-6 h-6" : "w-7 h-7"} />
             
             {item.path === "/notifications" && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white" />
+              <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
             )}
           </div>
         </Link>

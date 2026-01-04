@@ -1,25 +1,91 @@
-"use client"
+"use client";
 
-import { Image as ImageIcon, Heart, MessageCircle, Share2, MoreHorizontal } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Image as ImageIcon, Heart, MessageCircle, Share2, MoreHorizontal, Loader2 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Textarea } from "@/components/ui/textarea";
+import { useFeed, useCreatePost, useLikePost } from "@/hooks/use-post";
+import { BlogSkeleton } from "@/components/skeletons/blog-skeleton";
+import { useAuthStore } from "@/store/use-auth-store";
 
 export default function BlogPage() {
+  const [postContent, setPostContent] = useState("");
+  const user = useAuthStore((state) => state.user);
+  
+  const {
+    data,
+    isLoading,
+    error,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useFeed();
+
+  const { mutate: createPost, isPending: isCreatingPost } = useCreatePost();
+  const { mutate: likePost } = useLikePost();
+
+  const handleCreatePost = () => {
+    if (!postContent.trim()) return;
+    
+    createPost(
+      { content: postContent, privacy: "public" },
+      {
+        onSuccess: () => {
+          setPostContent("");
+        },
+      }
+    );
+  };
+
+  const handleLike = (postId: string, isLiked: boolean) => {
+    likePost({ postId, isLiked });
+  };
+
+  // Infinite scroll logic
+  useEffect(() => {
+    const handleScroll = (e: Event) => {
+      const target = e.target as HTMLDivElement;
+      if (!target) return;
+
+      const { scrollTop, scrollHeight, clientHeight } = target;
+      const threshold = 300; // Load more when 300px from bottom
+
+      if (
+        scrollHeight - scrollTop - clientHeight < threshold &&
+        hasNextPage &&
+        !isFetchingNextPage
+      ) {
+        fetchNextPage();
+      }
+    };
+
+    const scrollArea = document.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollArea) {
+      scrollArea.addEventListener('scroll', handleScroll);
+      return () => scrollArea.removeEventListener('scroll', handleScroll);
+    }
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+
+  const allPosts = data?.pages.flatMap((page) => page.posts) || [];
+
   return (
     <div className="flex flex-col h-full bg-slate-50/50 w-full">
       <ScrollArea className="flex-1 w-full">
         <div className="w-full py-4 md:py-8 px-4 md:px-6 space-y-6">
-          
+          {/* Create Post */}
           <div className="bg-white p-4 md:p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
             <div className="flex gap-3 md:gap-4">
               <Avatar className="h-10 w-10 md:h-12 md:w-12 shrink-0">
-                <AvatarImage src="https://github.com/shadcn.png" />
-                <AvatarFallback>JD</AvatarFallback>
+                <AvatarImage src={user?.avatar} />
+                <AvatarFallback>{user?.displayName?.[0] || "U"}</AvatarFallback>
               </Avatar>
-              <Textarea 
-                placeholder="Bạn đang nghĩ gì thế?" 
+              <Textarea
+                placeholder="Bạn đang nghĩ gì thế?"
+                value={postContent}
+                onChange={(e) => setPostContent(e.target.value)}
+                disabled={isCreatingPost}
                 className="flex-1 border-none bg-slate-50 rounded-xl resize-none focus-visible:ring-0 min-h-[80px] md:min-h-[100px] text-sm md:text-base p-3"
               />
             </div>
@@ -28,56 +94,127 @@ export default function BlogPage() {
                 <ImageIcon className="w-4 h-4 md:w-5 md:h-5 text-green-500" />
                 <span className="text-xs md:text-sm">Ảnh/Video</span>
               </Button>
-              <Button className="bg-blue-600 hover:bg-blue-700 px-4 md:px-8 rounded-full h-9 md:h-10 text-xs md:text-sm font-semibold text-white">
-                Đăng bài
+              <Button
+                onClick={handleCreatePost}
+                disabled={!postContent.trim() || isCreatingPost}
+                className="bg-blue-600 hover:bg-blue-700 px-4 md:px-8 rounded-full h-9 md:h-10 text-xs md:text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isCreatingPost ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Đang đăng...
+                  </>
+                ) : (
+                  "Đăng bài"
+                )}
               </Button>
             </div>
           </div>
 
-          {[1, 2].map((post) => (
-            <div key={post} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
-              <div className="p-4 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <Avatar className="h-10 w-10 shrink-0">
-                    <AvatarFallback className="bg-slate-100 font-bold text-slate-600">AN</AvatarFallback>
-                  </Avatar>
-                  <div>
-                    <p className="font-bold text-sm text-slate-900 leading-none">Alex Nguyen</p>
-                    <p className="text-[11px] text-slate-400 mt-1.5">2 giờ trước</p>
+          {/* Feed */}
+          {isLoading ? (
+            <>
+              <BlogSkeleton />
+              <BlogSkeleton />
+              <BlogSkeleton />
+            </>
+          ) : error ? (
+            <div className="text-center py-12 text-slate-500">
+              Không thể tải bài viết
+            </div>
+          ) : allPosts.length > 0 ? (
+            <>
+              {allPosts.map((post) => (
+                <div key={post.id} className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  {/* Post Header */}
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-10 w-10 shrink-0">
+                        {post.author.avatar ? (
+                          <img src={post.author.avatar} alt={post.author.displayName} className="w-full h-full object-cover" />
+                        ) : (
+                          <AvatarFallback className="bg-slate-100 font-bold text-slate-600">
+                            {post.author.displayName?.charAt(0) || 'U'}
+                          </AvatarFallback>
+                        )}
+                      </Avatar>
+                      <div>
+                        <p className="font-bold text-sm text-slate-900 leading-none">
+                          {post.author.displayName || `User ${post.authorId.slice(0, 8)}`}
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-1.5">
+                          {new Date(post.createdAt).toLocaleDateString("vi-VN", {
+                            day: "numeric",
+                            month: "short",
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400">
+                      <MoreHorizontal className="w-5 h-5" />
+                    </Button>
+                  </div>
+
+                  {/* Post Content */}
+                  <div className="px-4 pb-3">
+                    <p className="text-sm md:text-base text-slate-800 leading-relaxed whitespace-pre-wrap">
+                      {post.content}
+                    </p>
+                  </div>
+
+                  {/* Post Media */}
+                  {post.media && post.media.length > 0 && (
+                    <div className="bg-slate-100 aspect-video w-full overflow-hidden">
+                      <img
+                        src={post.media[0].url}
+                        className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                        alt="Post content"
+                      />
+                    </div>
+                  )}
+
+                  {/* Post Actions */}
+                  <div className="p-1 md:p-2 flex items-center justify-around border-t border-slate-50">
+                    <Button
+                      variant="ghost"
+                      onClick={() => handleLike(post.id, post.likesCount > 0)}
+                      className="flex-1 gap-2 text-slate-600 hover:text-red-500 text-xs md:text-sm h-10"
+                    >
+                      <Heart className="w-4 h-4 md:w-5 md:h-5" />
+                      Thích {post.likesCount > 0 && `(${post.likesCount})`}
+                    </Button>
+                    <Button variant="ghost" className="flex-1 gap-2 text-slate-600 hover:text-blue-600 text-xs md:text-sm h-10">
+                      <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />
+                      Bình luận {post.commentsCount > 0 && `(${post.commentsCount})`}
+                    </Button>
+                    <Button variant="ghost" className="flex-1 gap-2 text-slate-600 text-xs md:text-sm h-10">
+                      <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+                      Chia sẻ
+                    </Button>
                   </div>
                 </div>
-                <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400">
-                  <MoreHorizontal className="w-5 h-5" />
-                </Button>
-              </div>
+              ))}
 
-              <div className="px-4 pb-3">
-                <p className="text-sm md:text-base text-slate-800 leading-relaxed">
-                  Giao diện Khám phá giờ đã hiển thị rộng rãi hơn trên Web! 🚀 #Responsive #NextJS
-                </p>
-              </div>
+              {/* Load More Indicator */}
+              {isFetchingNextPage && (
+                <div className="flex justify-center py-4">
+                  <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                </div>
+              )}
 
-              <div className="bg-slate-100 aspect-video w-full overflow-hidden">
-                <img 
-                  src="https://images.unsplash.com/photo-1498050108023-c5249f4df085" 
-                  className="w-full h-full object-cover hover:scale-105 transition-transform duration-500" 
-                  alt="Post content" 
-                />
-              </div>
-
-              <div className="p-1 md:p-2 flex items-center justify-around border-t border-slate-50">
-                <Button variant="ghost" className="flex-1 gap-2 text-slate-600 hover:text-red-500 text-xs md:text-sm h-10">
-                  <Heart className="w-4 h-4 md:w-5 md:h-5" /> Thích
-                </Button>
-                <Button variant="ghost" className="flex-1 gap-2 text-slate-600 hover:text-blue-600 text-xs md:text-sm h-10">
-                  <MessageCircle className="w-4 h-4 md:w-5 md:h-5" /> Bình luận
-                </Button>
-                <Button variant="ghost" className="flex-1 gap-2 text-slate-600 text-xs md:text-sm h-10">
-                  <Share2 className="w-4 h-4 md:w-5 md:h-5" /> Chia sẻ
-                </Button>
-              </div>
+              {!hasNextPage && allPosts.length > 0 && (
+                <div className="text-center py-4 text-slate-400 text-sm">
+                  Bạn đã xem hết bài viết
+                </div>
+              )}
+            </>
+          ) : (
+            <div className="text-center py-12 text-slate-500">
+              Chưa có bài viết nào. Hãy đăng bài đầu tiên!
             </div>
-          ))}
+          )}
         </div>
       </ScrollArea>
     </div>

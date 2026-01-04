@@ -1,0 +1,54 @@
+"use client";
+
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { notificationService, NotificationsResponse } from "@/api/notification";
+
+export const useNotifications = () => {
+  return useQuery({
+    queryKey: ["notifications"],
+    queryFn: (): Promise<NotificationsResponse> =>
+      notificationService.getNotifications(),
+    refetchInterval: 30000, // Refetch every 30 seconds
+  });
+};
+
+export const useMarkNotificationAsRead = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: notificationService.markAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+};
+
+export const useMarkAllNotificationsAsRead = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: notificationService.markAllAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      toast.success("Đã đánh dấu tất cả thông báo là đã đọc");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể đánh dấu thông báo");
+    },
+  });
+};
+
+export const useDeleteNotification = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: notificationService.deleteNotification,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể xóa thông báo");
+    },
+  });
+};
