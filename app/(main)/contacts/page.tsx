@@ -1,14 +1,15 @@
 "use client"
 
-import { UserPlus, Users2, Bookmark, Search, Loader, MessageCircle, X } from "lucide-react";
+import { UserPlus, Users2, Bookmark, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useContacts, useFriendRequests, useSendFriendRequest, useRemoveFriend } from "@/hooks/use-contact";
+import { useContacts, useFriendRequests, useSendFriendRequest } from "@/hooks/use-contact";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { FriendRequestsList } from "@/components/contact/friend-requests-list";
+import { SearchAndAddFriend } from "@/components/contact/search-and-add-friend";
+import { FriendsList } from "@/components/contact/friends-list";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export default function ContactsPage() {
@@ -16,21 +17,26 @@ export default function ContactsPage() {
   const { data: contactsData, isLoading: isLoadingContacts } = useContacts();
   const { data: friendRequestsData, isLoading: isLoadingRequests } = useFriendRequests();
   const { mutate: sendFriendRequest, isPending: isSendingRequest } = useSendFriendRequest();
-  const { mutate: removeFriend } = useRemoveFriend();
   const [searchQuery, setSearchQuery] = useState("");
   const [showRequests, setShowRequests] = useState(false);
+  const [showSearchDialog, setShowSearchDialog] = useState(false);
 
   const contacts = contactsData?.contacts || [];
+  console.log("ContactsPage loaded contacts:", contacts);
   const friendRequests = friendRequestsData?.requests || [];
-
-  const filteredContacts = contacts.filter(contact =>
-    contact.displayName.toLowerCase().includes(searchQuery.toLowerCase())
-  );
 
   return (
     <div className="flex flex-col h-full bg-white w-full">
-      <header className="h-[60px] md:h-[70px] border-b border-slate-100 flex items-center px-4 md:px-6 sticky top-0 bg-white z-10 shrink-0">
+      <header className="h-[60px] md:h-[70px] border-b border-slate-100 flex items-center justify-between px-4 md:px-6 sticky top-0 bg-white z-10 shrink-0">
         <h1 className="text-lg md:text-xl font-bold">Danh bạ</h1>
+        <Button
+          size="sm"
+          onClick={() => setShowSearchDialog(true)}
+          className="flex items-center gap-2"
+        >
+          <UserPlus className="w-4 h-4" />
+          <span className="hidden sm:inline">Thêm bạn</span>
+        </Button>
       </header>
 
       <ScrollArea className="flex-1 w-full">
@@ -87,57 +93,13 @@ export default function ContactsPage() {
           {/* Friends List */}
           <div className="space-y-4">
             <h3 className="font-bold text-slate-900">
-              Bạn bè ({filteredContacts.length})
+              Bạn bè ({contacts.filter(c => c.displayName.toLowerCase().includes(searchQuery.toLowerCase())).length})
             </h3>
-            {isLoadingContacts ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader className="w-6 h-6 animate-spin text-slate-400" />
-              </div>
-            ) : filteredContacts.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
-                {filteredContacts.map((contact) => (
-                  <div key={contact.id} className="p-3 rounded-xl hover:bg-slate-50 border border-transparent hover:border-slate-100 transition-all group">
-                    <div className="flex items-start justify-between mb-2">
-                      <Avatar className="h-10 w-10">
-                        {contact.avatar ? (
-                          <img src={contact.avatar} alt={contact.displayName} className="w-full h-full object-cover" />
-                        ) : (
-                          <AvatarFallback className="bg-slate-100 font-bold">
-                            {contact.displayName.charAt(0).toUpperCase()}
-                          </AvatarFallback>
-                        )}
-                      </Avatar>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0"
-                          onClick={() => router.push(`/messages/${contact.id}`)}
-                        >
-                          <MessageCircle className="w-4 h-4 text-blue-600" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 w-7 p-0 text-red-600"
-                          onClick={() => removeFriend(contact.id)}
-                        >
-                          ×
-                        </Button>
-                      </div>
-                    </div>
-                    <p className="font-semibold text-sm text-slate-900">{contact.displayName}</p>
-                    <p className="text-xs text-slate-400">
-                      {contact.isOnline ? "Đang hoạt động" : "Ngoại tuyến"}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-slate-500">
-                Không tìm thấy bạn bè nào
-              </div>
-            )}
+            <FriendsList 
+              friends={contacts} 
+              isLoading={isLoadingContacts}
+              searchQuery={searchQuery}
+            />
           </div>
         </div>
       </ScrollArea>
@@ -151,6 +113,12 @@ export default function ContactsPage() {
           <FriendRequestsList requests={friendRequests} isLoading={isLoadingRequests} />
         </DialogContent>
       </Dialog>
+
+      {/* Search and Add Friend Modal */}
+      <SearchAndAddFriend 
+        open={showSearchDialog} 
+        onOpenChange={setShowSearchDialog} 
+      />
     </div>
   );
 }

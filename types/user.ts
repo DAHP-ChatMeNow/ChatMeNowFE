@@ -1,5 +1,6 @@
 export interface User {
   id: string;
+  _id?: string; 
   accountId: string;
   displayName: string;
   bio?: string;
@@ -11,4 +12,5 @@ export interface User {
   lastSeen?: Date;
   friends: string[];
   createdAt: Date;
+
 }

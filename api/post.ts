@@ -8,10 +8,10 @@ export type CreatePostPayload = {
   privacy?: "public" | "friends" | "private";
 };
 
-// Backend trả về Post với authorId populated thành User object
+
 interface BackendPost {
   id: string;
-  authorId: User; // Backend populate thành User object
+  authorId: User; 
   content: string;
   privacy: string;
   media?: Array<{ url: string; type: string; duration?: number }>;
@@ -30,11 +30,11 @@ const getFeed = async ({ pageParam = 1 }: { pageParam?: number }) => {
     } 
   });
   
-  // Transform backend response: authorId (populated User) -> author
+  
   const posts: Post[] = data.map((post) => ({
     id: post.id,
     authorId: typeof post.authorId === 'object' ? post.authorId.id : post.authorId,
-    author: post.authorId as User, // Backend đã populate thành User object
+    author: post.authorId as User, 
     content: post.content,
     privacy: post.privacy,
     media: post.media,
@@ -47,7 +47,7 @@ const getFeed = async ({ pageParam = 1 }: { pageParam?: number }) => {
   
   return {
     posts,
-    hasMore: data.length === 10, // Nếu đủ 10 posts thì còn page tiếp theo
+    hasMore: data.length === 10, 
     nextPage: pageParam + 1,
   };
 };

@@ -3,7 +3,7 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FriendRequest } from "@/types/friend-request";
-import { useAcceptFriendRequest, useRejectFriendRequest } from "@/hooks/use-contact";
+import { useAcceptFriendRequest, useRejectFriendRequest, useGetUserEmailById } from "@/hooks/use-contact";
 import { useState } from "react";
 import { Loader } from "lucide-react";
 
@@ -12,100 +12,120 @@ interface FriendRequestsListProps {
   isLoading?: boolean;
 }
 
+function FriendRequestItem({
+  request,
+  processingIds,
+  onAccept,
+  onReject,
+}: {
+  request: FriendRequest;
+  processingIds: string[];
+  onAccept: (id: string) => void;
+  onReject: (id: string) => void;
+}) {
+  const requestId = request._id || request.id;
+  if (!requestId) return null;
+
+  // Get sender ID from senderId field (which is populated as an object)
+  const senderObj = typeof request.senderId === 'string' 
+    ? { _id: request.senderId ,
+        displayName: request.sender?.displayName,
+        avatar: request.sender?.avatar
+    } 
+    : request.senderId;
+  const senderId = senderObj?._id;
+
+  // Only fetch email, sender info is already populated
+  const { data: emailData } = useGetUserEmailById(senderId || "");
+
+  const displayName = senderObj?.displayName || "Unknown";
+  const avatar = senderObj?.avatar;
+  const email = emailData?.email;
+
+  const isProcessing = processingIds.includes(requestId);
+
+  return (
+    <div className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 hover:bg-slate-50">
+      <Avatar className="h-12 w-12">
+        {avatar ? (
+          <img src={avatar} alt={displayName} className="w-full h-full object-cover" />
+        ) : (
+          <AvatarFallback>
+            {displayName.charAt(0).toUpperCase()}
+          </AvatarFallback>
+        )}
+      </Avatar>
+
+      <div className="flex-1">
+        <p className="font-semibold text-sm">{displayName}</p>
+        {email && (
+          <p className="text-xs text-slate-400">{email}</p>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <Button
+          size="sm"
+          onClick={() => onAccept(requestId)}
+          disabled={isProcessing}
+        >
+          {isProcessing ? <Loader className="w-3 h-3 animate-spin" /> : "Chấp nhận"}
+        </Button>
+
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onReject(requestId)}
+          disabled={isProcessing}
+        >
+          Từ chối
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function FriendRequestsList({ requests, isLoading }: FriendRequestsListProps) {
   const { mutate: acceptRequest } = useAcceptFriendRequest();
   const { mutate: rejectRequest } = useRejectFriendRequest();
   const [processingIds, setProcessingIds] = useState<string[]>([]);
 
-  const handleAccept = (requestId: string) => {
-    setProcessingIds([...processingIds, requestId]);
-    acceptRequest(requestId, {
-      onSettled: () => {
-        setProcessingIds(processingIds.filter(id => id !== requestId));
-      },
+  const handleAccept = (id: string) => {
+    setProcessingIds(prev => [...prev, id]);
+    acceptRequest(id, {
+      onSettled: () =>
+        setProcessingIds(prev => prev.filter(x => x !== id)),
     });
   };
 
-  const handleReject = (requestId: string) => {
-    setProcessingIds([...processingIds, requestId]);
-    rejectRequest(requestId, {
-      onSettled: () => {
-        setProcessingIds(processingIds.filter(id => id !== requestId));
-      },
+  const handleReject = (id: string) => {
+    setProcessingIds(prev => [...prev, id]);
+    rejectRequest(id, {
+      onSettled: () =>
+        setProcessingIds(prev => prev.filter(x => x !== id)),
     });
   };
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-8">
-        <Loader className="w-6 h-6 animate-spin text-slate-400" />
-      </div>
-    );
+    return <Loader className="mx-auto animate-spin" />;
   }
 
-  if (requests.length === 0) {
-    return (
-      <div className="text-center py-8 text-slate-500">
-        Không có lời mời kết bạn nào
-      </div>
-    );
+  if (!requests || requests.length === 0) {
+    return <p className="text-center text-slate-500">Không có lời mời kết bạn nào</p>;
   }
 
   return (
     <div className="space-y-3">
-      {requests.map((request) => (
-        <div
-          key={request.id}
-          className="flex items-center gap-4 p-4 rounded-xl border border-slate-100 hover:bg-slate-50 transition-all"
-        >
-          <Avatar className="h-12 w-12">
-            {request.sender?.avatar ? (
-              <img
-                src={request.sender.avatar}
-                alt={request.sender.displayName}
-                className="w-full h-full object-cover"
-              />
-            ) : (
-              <AvatarFallback className="bg-slate-100 font-bold">
-                {request.sender?.displayName?.charAt(0).toUpperCase() || 'U'}
-              </AvatarFallback>
-            )}
-          </Avatar>
-
-          <div className="flex-1">
-            <p className="font-semibold text-sm text-slate-900">
-              {request.sender?.displayName || 'Unknown'}
-            </p>
-            <p className="text-xs text-slate-400">
-              {request.sender?.bio || 'Người dùng'}
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <Button
-              size="sm"
-              className="bg-blue-600 hover:bg-blue-700 h-8 px-4 rounded-lg"
-              onClick={() => handleAccept(request.id)}
-              disabled={processingIds.includes(request.id)}
-            >
-              {processingIds.includes(request.id) ? (
-                <Loader className="w-3 h-3 animate-spin" />
-              ) : (
-                'Chấp nhận'
-              )}
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="h-8 px-4 rounded-lg"
-              onClick={() => handleReject(request.id)}
-              disabled={processingIds.includes(request.id)}
-            >
-              Từ chối
-            </Button>
-          </div>
-        </div>
+      {requests.map(req => (
+        <FriendRequestItem
+          key={req._id || req.id}
+          request={req}
+          processingIds={processingIds}
+          onAccept={handleAccept}
+          onReject={handleReject}
+        />
       ))}
     </div>
   );
 }
+

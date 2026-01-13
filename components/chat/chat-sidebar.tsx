@@ -13,7 +13,7 @@ export function ChatSidebar() {
   const currentId = params.id as string;
   const { data: conversationsData, isLoading, error } = useConversations();
   const conversations = conversationsData?.conversations || [];
-
+  console.log("ChatSidebar loaded conversations:", conversations);
   return (
     <aside className="w-[350px] border-r border-slate-100 flex flex-col h-full bg-white shrink-0">
       <div className="p-4 flex items-center justify-between">

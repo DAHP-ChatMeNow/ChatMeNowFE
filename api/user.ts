@@ -70,4 +70,40 @@ export const userService = {
     const res = await api.get<User>(`/users/${userId}`);
     return res.data;
   },
+
+  /**
+   * Get user profile by ID (with friends list and full info)
+   */
+  getUserProfile: async (userId: string) => {
+    console.log("Fetched user profile for userId:", userId);
+    const res = await api.get<User>(`/users/${userId}`);
+    console.log("Fetched user profile for userId:", userId, res.data);
+    return res.data;
+  },
+
+  /**
+   * Get current user's email from account
+   */
+  getUserEmail: async () => {
+    const res = await api.get<{ 
+      success: boolean; 
+      email: string; 
+      phoneNumber?: string; 
+      displayName: string 
+    }>(`/users/me/email`);
+    return res.data;
+  },
+
+  /**
+   * Get user's email by user ID
+   */
+  getUserEmailById: async (userId: string) => {
+    const res = await api.get<{ 
+      success: boolean; 
+      email: string; 
+      phoneNumber?: string; 
+      displayName: string 
+    }>(`/users/${userId}/email`);
+    return res.data;
+  },
 };

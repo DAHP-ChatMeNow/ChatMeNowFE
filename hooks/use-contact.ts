@@ -3,13 +3,67 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { contactService, ContactsResponse } from "@/api/contact";
+import { userService } from "@/api/user";
 import { User } from "@/types/user";
 import { FriendRequest } from "@/types/friend-request";
+import { useAuthStore } from "@/store/use-auth-store";
 
 export const useContacts = () => {
+  const user = useAuthStore((state) => state.user);
   return useQuery({
-    queryKey: ["contacts"],
-    queryFn: (): Promise<ContactsResponse> => contactService.getContacts(),
+    queryKey: ["contacts", user?._id],
+    queryFn: (): Promise<ContactsResponse> => contactService.getContacts(user?._id || ""),
+    enabled: !!user?._id,
+  });
+};
+
+export const useSearchUsers = (query: string) => {
+  return useQuery({
+    queryKey: ["search-users", query],
+    queryFn: () => contactService.searchUsers(query),
+    enabled: query.length > 0,
+  });
+};
+
+export const useSearchAndAddFriend = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: contactService.searchAndAddFriend,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      toast.success("Đã gửi lời mời kết bạn");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể gửi lời mời");
+    },
+  });
+};
+
+export const useGetUserEmail = () => {
+  return useQuery({
+    queryKey: ["user-email"],
+    queryFn: () => userService.getUserEmail(),
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+  });
+};
+
+export const useGetUserEmailById = (userId: string) => {
+  return useQuery({
+    queryKey: ["user-email", userId],
+    queryFn: () => userService.getUserEmailById(userId),
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+    enabled: !!userId,
+  });
+};
+
+export const useGetUserProfile = (userId: string) => {
+  return useQuery({
+    queryKey: ["user-profile", userId],
+    queryFn: () => userService.getUserProfile(userId),
+    staleTime: 1000 * 60 * 10, // Cache for 10 minutes
+    enabled: !!userId,
   });
 };
 

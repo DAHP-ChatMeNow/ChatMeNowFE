@@ -109,11 +109,12 @@ export default function ChatDetailPage() {
     }
   };
 
-  const conversationName = "Chat";
+  const conversationName = conversationData?.name || "Chat";
+  const conversationAvatar = conversationData?.groupAvatar;
 
   return (
     <div className="flex flex-col h-full bg-white relative w-full overflow-hidden">
-      <ChatHeader name={conversationName} isOnline={isConnected} />
+      <ChatHeader name={conversationName} isOnline={isConnected} avatar={conversationAvatar} />
 
       <ScrollArea className="flex-1 p-3 md:p-6 bg-slate-50/30" ref={scrollRef}>
         <div className="flex flex-col gap-4 w-full max-w-5xl mx-auto pb-4">

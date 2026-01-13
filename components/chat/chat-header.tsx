@@ -4,7 +4,7 @@ import { ChevronLeft, Phone, Video, MoreVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-export function ChatHeader({ name, isOnline }: { name: string, isOnline: boolean }) {
+export function ChatHeader({ name, isOnline, avatar }: { name: string, isOnline: boolean, avatar?: string }) {
   const router = useRouter();
 
   return (
@@ -19,8 +19,10 @@ export function ChatHeader({ name, isOnline }: { name: string, isOnline: boolean
 
         <div className="relative">
           <Avatar className="h-10 w-10 md:h-11 md:w-11">
-            <AvatarImage src="" />
-            <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">AN</AvatarFallback>
+            <AvatarImage src={avatar} />
+            <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">
+              {name.charAt(0).toUpperCase()}
+            </AvatarFallback>
           </Avatar>
           {isOnline && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />}
         </div>
