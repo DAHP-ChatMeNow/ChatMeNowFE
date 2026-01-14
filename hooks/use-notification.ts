@@ -30,6 +30,18 @@ export const useMarkAllNotificationsAsRead = () => {
   return useMutation({
     mutationFn: notificationService.markAllAsRead,
     onSuccess: () => {
+      // Optimistically update the cache
+      queryClient.setQueryData(["notifications"], (oldData: any) => {
+        if (!oldData) return oldData;
+        return {
+          ...oldData,
+          notifications: oldData.notifications.map((noti: any) => ({
+            ...noti,
+            isRead: true,
+          })),
+          unreadCount: 0,
+        };
+      });
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       toast.success("Đã đánh dấu tất cả thông báo là đã đọc");
     },

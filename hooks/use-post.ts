@@ -54,10 +54,10 @@ export const useLikePost = () => {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: ({ postId, isLiked }: { postId: string; isLiked: boolean }) => {
-      return isLiked ? postService.unlikePost(postId) : postService.likePost(postId);
+    mutationFn: ({ postId }: { postId: string }) => {
+      return postService.likePost(postId);
     },
-    onMutate: async ({ postId, isLiked }) => {
+    onMutate: async ({ postId }) => {
       await queryClient.cancelQueries({ queryKey: ["posts", "feed"] });
 
       const previousData = queryClient.getQueryData(["posts", "feed"]);
@@ -68,10 +68,11 @@ export const useLikePost = () => {
         const newPages = oldData.pages.map((page: any) => ({
           ...page,
           posts: page.posts.map((post: Post) => {
-            if (post.id === postId) {
+            if (post.id === postId && !post.isLikedByCurrentUser) {
               return {
                 ...post,
-                likesCount: isLiked ? post.likesCount - 1 : post.likesCount + 1,
+                likesCount: post.likesCount + 1,
+                isLikedByCurrentUser: true,
               };
             }
             return post;
@@ -86,11 +87,11 @@ export const useLikePost = () => {
 
       return { previousData };
     },
-    onError: (error, variables, context) => {
+    onError: (error: any, variables, context) => {
       if (context?.previousData) {
         queryClient.setQueryData(["posts", "feed"], context.previousData);
       }
-      toast.error("Không thể cập nhật trạng thái thích");
+      toast.error(error?.response?.data?.message || "Không thể thích bài viết");
     },
   });
 };

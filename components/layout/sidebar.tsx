@@ -2,9 +2,13 @@
 import { MessageSquare, Users, Bell, LayoutDashboard, User } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useNotifications } from "@/hooks/use-notification";
 
 export function Sidebar({ mode = "desktop" }: { mode?: "desktop" | "mobile" }) {
   const pathname = usePathname();
+  const { data: notificationsData } = useNotifications();
+  const unreadCount = notificationsData?.notifications?.filter(n => !n.isRead).length || 0;
+  
   const isActive = (path: string) => pathname.startsWith(path);
 
   const navItems = [
@@ -30,7 +34,7 @@ export function Sidebar({ mode = "desktop" }: { mode?: "desktop" | "mobile" }) {
           }`}>
             <item.icon className={mode === "desktop" ? "w-6 h-6" : "w-7 h-7"} />
             
-            {item.path === "/notifications" && (
+            {item.path === "/notifications" && unreadCount > 0 && (
               <span className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-white dark:border-slate-800" />
             )}
           </div>

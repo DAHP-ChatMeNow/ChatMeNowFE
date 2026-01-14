@@ -40,7 +40,9 @@ export default function BlogPage() {
   };
 
   const handleLike = (postId: string, isLiked: boolean) => {
-    likePost({ postId, isLiked });
+    if (!isLiked) {
+      likePost({ postId });
+    }
   };
 
   // Infinite scroll logic
@@ -114,9 +116,9 @@ export default function BlogPage() {
           {/* Feed */}
           {isLoading ? (
             <>
-              <BlogSkeleton />
-              <BlogSkeleton />
-              <BlogSkeleton />
+              <BlogSkeleton key="skeleton-1" />
+              <BlogSkeleton key="skeleton-2" />
+              <BlogSkeleton key="skeleton-3" />
             </>
           ) : error ? (
             <div className="text-center py-12 text-slate-500">
@@ -130,17 +132,17 @@ export default function BlogPage() {
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex items-center gap-3">
                       <Avatar className="h-10 w-10 shrink-0">
-                        {post.author.avatar ? (
+                        {post.author?.avatar ? (
                           <img src={post.author.avatar} alt={post.author.displayName} className="w-full h-full object-cover" />
                         ) : (
                           <AvatarFallback className="bg-slate-100 font-bold text-slate-600">
-                            {post.author.displayName?.charAt(0) || 'U'}
+                            {post.author?.displayName?.charAt(0) || 'U'}
                           </AvatarFallback>
                         )}
                       </Avatar>
                       <div>
                         <p className="font-bold text-sm text-slate-900 leading-none">
-                          {post.author.displayName || `User ${post.authorId.slice(0, 8)}`}
+                          {post.author?.displayName || `User ${post.authorId.slice(0, 8)}`}
                         </p>
                         <p className="text-[11px] text-slate-400 mt-1.5">
                           {new Date(post.createdAt).toLocaleDateString("vi-VN", {
@@ -179,10 +181,19 @@ export default function BlogPage() {
                   <div className="p-1 md:p-2 flex items-center justify-around border-t border-slate-50">
                     <Button
                       variant="ghost"
-                      onClick={() => handleLike(post.id, post.likesCount > 0)}
-                      className="flex-1 gap-2 text-slate-600 hover:text-red-500 text-xs md:text-sm h-10"
+                      onClick={() => handleLike(post.id, post.isLikedByCurrentUser || false)}
+                      disabled={post.isLikedByCurrentUser}
+                      className={`flex-1 gap-2 text-xs md:text-sm h-10 ${
+                        post.isLikedByCurrentUser
+                          ? "text-red-500 cursor-not-allowed"
+                          : "text-slate-600 hover:text-red-500"
+                      }`}
                     >
-                      <Heart className="w-4 h-4 md:w-5 md:h-5" />
+                      {post.isLikedByCurrentUser ? (
+                        <Heart className="w-4 h-4 md:w-5 md:h-5 fill-current" />
+                      ) : (
+                        <Heart className="w-4 h-4 md:w-5 md:h-5" />
+                      )}
                       Thích {post.likesCount > 0 && `(${post.likesCount})`}
                     </Button>
                     <Button variant="ghost" className="flex-1 gap-2 text-slate-600 hover:text-blue-600 text-xs md:text-sm h-10">

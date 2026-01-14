@@ -5,7 +5,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { useNotifications, useMarkAllNotificationsAsRead } from "@/hooks/use-notification";
-import { useAcceptFriendRequest as useAcceptFriendRequestContact } from "@/hooks/use-contact";
+import { useAcceptFriendRequest as useAcceptFriendRequestContact, useRejectFriendRequest as useRejectFriendRequestContact } from "@/hooks/use-contact";
 import { useState } from "react";
 
 const getNotificationIcon = (type: string) => {
@@ -38,15 +38,36 @@ export default function NotificationsPage() {
   const { data: notificationsData, isLoading, error } = useNotifications();
   const { mutate: markAllAsRead, isPending: isMarkingAll } = useMarkAllNotificationsAsRead();
   const { mutate: acceptFriendRequest } = useAcceptFriendRequestContact();
+  const { mutate: rejectFriendRequest } = useRejectFriendRequestContact();
   const [acceptingIds, setAcceptingIds] = useState<string[]>([]);
+  const [rejectingIds, setRejectingIds] = useState<string[]>([]);
 
   const notifications = notificationsData?.notifications || [];
+  // Only show unread notifications
+  const unreadNotifications = notifications.filter(noti => !noti.isRead);
 
   const handleAcceptFriendRequest = (notificationId: string, requestId: string) => {
+    if (!requestId) {
+      console.error("Request ID is missing", { notificationId, requestId });
+      return;
+    }
     setAcceptingIds([...acceptingIds, notificationId]);
     acceptFriendRequest(requestId, {
       onSettled: () => {
         setAcceptingIds(acceptingIds.filter(id => id !== notificationId));
+      },
+    });
+  };
+
+  const handleRejectFriendRequest = (notificationId: string, requestId: string) => {
+    if (!requestId) {
+      console.error("Request ID is missing", { notificationId, requestId });
+      return;
+    }
+    setRejectingIds([...rejectingIds, notificationId]);
+    rejectFriendRequest(requestId, {
+      onSettled: () => {
+        setRejectingIds(rejectingIds.filter(id => id !== notificationId));
       },
     });
   };
@@ -90,15 +111,18 @@ export default function NotificationsPage() {
               Không thể tải thông báo
             </div>
           ) : notifications.length > 0 ? (
-            notifications.map((noti) => (
+            unreadNotifications.length > 0 ? (
+              unreadNotifications.map((noti, index) => (
               <div 
-                key={noti.id} 
+                key={`${noti.id}-${index}`} 
                 className={`flex items-start gap-4 p-4 rounded-2xl transition-all cursor-pointer ${noti.isRead ? 'hover:bg-slate-50' : 'bg-blue-50/40 border border-blue-100 shadow-sm'}`}
               >
                 <div className="relative">
                   <Avatar className="h-12 w-12 border border-white shadow-sm">
                     <AvatarFallback className="bg-slate-100 font-bold">
-                      {noti.senderId?.charAt(0).toUpperCase() || 'N'}
+                      {typeof noti.senderId === 'string' 
+                        ? noti.senderId.charAt(0).toUpperCase() 
+                        : (noti.senderId as any)?.name?.charAt(0).toUpperCase() || 'N'}
                     </AvatarFallback>
                   </Avatar>
                   <div className={`absolute -bottom-1 -right-1 p-1 rounded-full border-2 border-white ${getNotificationBgColor(noti.type)}`}>
@@ -127,8 +151,18 @@ export default function NotificationsPage() {
                           'Chấp nhận'
                         )}
                       </Button>
-                      <Button size="sm" variant="outline" className="h-8 px-4 rounded-lg">
-                        Từ chối
+                      <Button 
+                        size="sm" 
+                        variant="outline" 
+                        className="h-8 px-4 rounded-lg"
+                        onClick={() => handleRejectFriendRequest(noti.id, noti.referenced || '')}
+                        disabled={rejectingIds.includes(noti.id)}
+                      >
+                        {rejectingIds.includes(noti.id) ? (
+                          <Loader className="w-3 h-3 animate-spin" />
+                        ) : (
+                          'Từ chối'
+                        )}
                       </Button>
                     </div>
                   )}
@@ -136,6 +170,11 @@ export default function NotificationsPage() {
                 {!noti.isRead && <div className="w-2.5 h-2.5 bg-blue-600 rounded-full mt-2" />}
               </div>
             ))
+            ) : (
+              <div className="text-center py-12 text-slate-500">
+                Bạn đã đọc tất cả thông báo
+              </div>
+            )
           ) : (
             <div className="text-center py-12 text-slate-500">
               Bạn không có thông báo nào
