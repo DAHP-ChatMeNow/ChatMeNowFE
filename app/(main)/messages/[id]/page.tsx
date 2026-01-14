@@ -5,22 +5,30 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
 import { useParams } from "next/navigation";
-import { useMessages, useSendMessage } from "@/hooks/use-chat";
+import { useConversation, useMessages, useSendMessage, useConversationDisplay } from "@/hooks/use-chat";
 import { MessageSkeleton } from "@/components/skeletons/message-skeleton";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSocket } from "@/components/providers/socket-provider";
 import { useQueryClient } from "@tanstack/react-query";
 import { Message } from "@/types/message";
-import { MessagesResponse } from "@/api/chat";
 
 export default function ChatDetailPage() {
   const { id } = useParams();
   const conversationId = id as string;
+  const user = useAuthStore((state) => state.user);
   
+  // Fallback cho userId
+  const currentUserId = user?.id || user?._id;
+  
+  // Lấy conversation và messages riêng biệt
+  const { data: conversation } = useConversation(conversationId);
   const { data: messagesData, isLoading, error } = useMessages(conversationId);
   const messages = messagesData?.messages || [];
+  
+  // Hook tập trung logic phân biệt private/group - tự động fetch partner nếu cần
+  const { displayName: conversationName, avatar: conversationAvatar, isOnline: isOnlineStatus } = useConversationDisplay(conversation, currentUserId);
+
   const { mutate: sendMessage, isPending } = useSendMessage();
-  const user = useAuthStore((state) => state.user);
   const { socket, isConnected } = useSocket();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -41,9 +49,9 @@ export default function ChatDetailPage() {
     const handleNewMessage = (newMessage: Message) => {
       queryClient.setQueryData(
         ["messages", conversationId],
-        (oldData: MessagesResponse | undefined) => {
+        (oldData: any) => {
           if (!oldData) return { messages: [newMessage] };
-          const exists = oldData.messages.some((msg) => msg.id === newMessage.id);
+          const exists = oldData.messages.some((msg: Message) => msg.id === newMessage.id);
           if (exists) return oldData;
           return {
             messages: [...oldData.messages, newMessage],
@@ -109,12 +117,9 @@ export default function ChatDetailPage() {
     }
   };
 
-  const conversationName = conversationData?.name || "Chat";
-  const conversationAvatar = conversationData?.groupAvatar;
-
   return (
     <div className="flex flex-col h-full bg-white relative w-full overflow-hidden">
-      <ChatHeader name={conversationName} isOnline={isConnected} avatar={conversationAvatar} />
+      <ChatHeader name={conversationName} isOnline={isOnlineStatus} avatar={conversationAvatar} />
 
       <ScrollArea className="flex-1 p-3 md:p-6 bg-slate-50/30" ref={scrollRef}>
         <div className="flex flex-col gap-4 w-full max-w-5xl mx-auto pb-4">
@@ -127,7 +132,22 @@ export default function ChatDetailPage() {
           ) : messages && messages.length > 0 ? (
             <>
               {messages.map((msg: Message) => {
-                const isMe = msg.senderId === user?.id;
+                // So sánh senderId với currentUserId (handle cả _id và id)
+                const messageSenderId = typeof msg.senderId === 'string' 
+                  ? msg.senderId 
+                  : (msg.senderId as any)?._id || (msg.senderId as any)?.id;
+                const isMe = messageSenderId === currentUserId;
+                
+                // Debug log
+                if (messages.indexOf(msg) === 0) {
+                  console.log("Message comparison:", {
+                    messageSenderId,
+                    currentUserId,
+                    isMe,
+                    rawSenderId: msg.senderId
+                  });
+                }
+                
                 return (
                   <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`}>
                     <div

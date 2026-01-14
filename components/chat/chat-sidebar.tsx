@@ -6,14 +6,28 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatItem } from "./chat-item";
 import { useParams } from "next/navigation";
 import { useConversations } from "@/hooks/use-chat";
+import { useAuthStore } from "@/store/use-auth-store";
 import { ChatListSkeleton } from "@/components/skeletons/chat-list-skeleton";
+import { ConversationItemDisplay } from "./conversation-item-display";
 
 export function ChatSidebar() {
   const params = useParams();
   const currentId = params.id as string;
+  const user = useAuthStore((state) => state.user);
   const { data: conversationsData, isLoading, error } = useConversations();
   const conversations = conversationsData?.conversations || [];
-  console.log("ChatSidebar loaded conversations:", conversations);
+  
+  // Fallback cho userId - lấy id hoặc _id
+  const currentUserId = user?.id || user?._id;
+  
+  console.log("ChatSidebar:", { 
+    userId: user?.id,
+    userIdFallback: user?._id, 
+    currentUserId,
+    conversationsCount: conversations.length,
+    firstConversation: conversations[0] 
+  });
+  
   return (
     <aside className="w-[350px] border-r border-slate-100 flex flex-col h-full bg-white shrink-0">
       <div className="p-4 flex items-center justify-between">
@@ -42,13 +56,10 @@ export function ChatSidebar() {
         ) : conversations && conversations.length > 0 ? (
           <div className="flex flex-col gap-1 pb-4">
             {conversations.map((chat) => (
-              <ChatItem
+              <ConversationItemDisplay
                 key={chat.id}
-                id={chat.id}
-                name={chat.name || "Unknown"}
-                lastMsg={chat.lastMessage?.content || "No messages yet"}
-                time={chat.lastMessage?.createdAt?.toString() || ""}
-                unread={0}
+                conversation={chat}
+                currentUserId={currentUserId}
                 isActive={currentId === chat.id}
               />
             ))}

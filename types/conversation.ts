@@ -15,10 +15,10 @@ export interface LastMessage {
 
 export interface Conversation {
   id: string;
+  _id: string;
   type: string;
   name?: string;
   groupAvatar?: string;
-  adminId: string;
   members: ConversationMember[];
   lastMessage?: LastMessage;
   createdAt: Date;

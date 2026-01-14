@@ -3,6 +3,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { chatService, ConversationsResponse, MessagesResponse, ConversationDetailsResponse } from "@/api/chat";
+import { userService } from "@/api/user";
 import { Message } from "@/types/message";
 import { Conversation } from "@/types/conversation";
 
@@ -13,19 +14,26 @@ export const useConversations = () => {
   });
 };
 
-export const useConversationDetails = (conversationId: string) => {
+export const useConversation = (conversationId: string) => {
   return useQuery({
     queryKey: ["conversation", conversationId],
-    queryFn: (): Promise<Conversation> => chatService.getConversationDetails(conversationId),
+    queryFn: async () => {
+      try {
+        return await chatService.getConversationDetails(conversationId);
+      } catch (error) {
+        console.error("Error fetching conversation:", error);
+        throw error;
+      }
+    },
     enabled: !!conversationId,
+    retry: 1,
   });
 };
 
 export const useMessages = (conversationId: string) => {
   return useQuery({
     queryKey: ["messages", conversationId],
-    queryFn: (): Promise<MessagesResponse> =>
-      chatService.getMessages(conversationId),
+    queryFn: () => chatService.getMessages(conversationId),
     enabled: !!conversationId,
   });
 };
@@ -59,4 +67,76 @@ export const useSendMessage = () => {
       toast.error(error?.response?.data?.message || "Không thể gửi tin nhắn");
     },
   });
+};
+
+export const useGetPrivateConversation = () => {
+  return useMutation({
+    mutationFn: chatService.getPrivateConversation,
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể lấy cuộc trò chuyện");
+    },
+  });
+};
+
+export const usePrivatePartner = (
+  conversation: Conversation | undefined,
+  currentUserId: string | undefined
+) => {
+  // Lấy partnerId từ members array
+  const partnerId =
+    conversation?.type === "private" && currentUserId
+      ? conversation.members.find(m => {
+          // Handle cả trường hợp userId là string hoặc object
+          const memberUserId = typeof m.userId === 'string' ? m.userId : (m.userId as any)?._id || (m.userId as any)?.id;
+          return memberUserId !== currentUserId;
+        })?.userId
+      : null;
+
+  // Nếu partnerId là object, lấy _id hoặc id
+  const partnerIdString = partnerId
+    ? (typeof partnerId === 'string' ? partnerId : (partnerId as any)._id || (partnerId as any).id)
+    : null;
+
+  console.log("usePrivatePartner:", {
+    conversationType: conversation?.type,
+    currentUserId,
+    members: conversation?.members,
+    partnerId,
+    partnerIdString
+  });
+
+  return useQuery({
+    queryKey: ["partner", partnerIdString],
+    queryFn: () => userService.getUserProfile(partnerIdString!),
+    enabled: !!partnerIdString,
+  });
+};
+
+/**
+ * Hook tập trung logic phân biệt private/group conversation
+ * Tự động fetch partner info nếu là private conversation
+ * Trả về displayName, avatar, isOnline dùng chung cho cả UI
+ */
+
+export const useConversationDisplay = (
+  conversation: Conversation | undefined,
+  currentUserId: string | undefined
+) => {
+  console.log("useConversationDisplay called with conversation:", conversation, "currentUserId:", currentUserId);
+  const { data: partner } = usePrivatePartner(conversation, currentUserId);
+
+  return {
+    displayName:
+      conversation?.type === "private"
+        ? partner?.displayName
+        : conversation?.name,
+    avatar:
+      conversation?.type === "private"
+        ? partner?.avatar
+        : conversation?.groupAvatar,
+    isOnline:
+      conversation?.type === "private"
+        ? partner?.isOnline ?? false
+        : false,
+  };
 };

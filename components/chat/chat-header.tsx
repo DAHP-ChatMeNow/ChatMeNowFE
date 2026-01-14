@@ -4,8 +4,17 @@ import { ChevronLeft, Phone, Video, MoreVertical } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
-export function ChatHeader({ name, isOnline, avatar }: { name: string, isOnline: boolean, avatar?: string }) {
+export function ChatHeader({ 
+  name, 
+  isOnline, 
+  avatar 
+}: { 
+  name?: string, 
+  isOnline?: boolean, 
+  avatar?: string 
+}) {
   const router = useRouter();
+  const displayName = name || "Chat";
 
   return (
     <div className="h-[65px] md:h-[75px] border-b border-slate-100 flex items-center justify-between px-4 bg-white/90 backdrop-blur-sm sticky top-0 z-30">
@@ -21,14 +30,14 @@ export function ChatHeader({ name, isOnline, avatar }: { name: string, isOnline:
           <Avatar className="h-10 w-10 md:h-11 md:w-11">
             <AvatarImage src={avatar} />
             <AvatarFallback className="bg-blue-100 text-blue-600 font-bold">
-              {name.charAt(0).toUpperCase()}
+              {(displayName || "U").charAt(0).toUpperCase()}
             </AvatarFallback>
           </Avatar>
           {isOnline && <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-white rounded-full" />}
         </div>
 
         <div className="flex flex-col">
-          <h2 className="font-bold text-slate-900 text-sm md:text-base leading-tight">{name}</h2>
+          <h2 className="font-bold text-slate-900 text-sm md:text-base leading-tight">{displayName}</h2>
           <p className="text-[11px] md:text-[12px] text-slate-400 font-medium">
             {isOnline ? "Đang hoạt động" : "Vừa truy cập"}
           </p>

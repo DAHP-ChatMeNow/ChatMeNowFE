@@ -12,6 +12,17 @@ export interface ConversationDetailsResponse {
 
 export interface MessagesResponse {
   messages: Message[];
+  conversation?: Conversation;
+}
+
+export interface PartnerResponse {
+  partner: {
+    _id: string;
+    displayName: string;
+    avatar: string;
+    isOnline: boolean;
+    lastSeen?: Date;
+  };
 }
 
 // Helper function to map _id to id for MongoDB compatibility
@@ -51,8 +62,13 @@ export const chatService = {
 
   // Lấy chi tiết conversation
   getConversationDetails: async (conversationId: string) => {
-    const res = await api.get<ConversationDetailsResponse>(`/chat/conversations/${conversationId}`);
-    return mapMongoId(res.data.conversation);
+    const res = await api.get<ConversationDetailsResponse | any>(`/chat/conversations/${conversationId}`);
+    // Handle cả format cũ (trực tiếp) và format mới (wrapped)
+    const conversation = res.data.conversation || res.data;
+    if (!conversation) {
+      throw new Error("Conversation not found");
+    }
+    return mapMongoId(conversation);
   },
 
   // Lấy messages của conversation
@@ -68,5 +84,17 @@ export const chatService = {
   sendMessage: async (data: { conversationId: string; content: string; type: string }) => {
     const res = await api.post<Message>("/chat/messages", data);
     return mapMongoId(res.data);
+  },
+
+  // Lấy private conversation với một người
+  getPrivateConversation: async (partnerId: string) => {
+    const res = await api.get<ConversationDetailsResponse>(`/chat/private/${partnerId}`);
+    return mapMongoId(res.data.conversation);
+  },
+
+  // Lấy thông tin partner trong private conversation
+  getPrivateConversationPartner: async (conversationId: string) => {
+    const res = await api.get<PartnerResponse>(`/chat/conversations/${conversationId}/partner`);
+    return mapMongoId(res.data.partner);
   },
 };

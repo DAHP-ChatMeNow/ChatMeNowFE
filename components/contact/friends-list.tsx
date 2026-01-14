@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { User } from "@/types/user";
 import { useRouter } from "next/navigation";
 import { useRemoveFriend } from "@/hooks/use-contact";
-import { useCreateConversation } from "@/hooks/use-chat";
+import { useGetPrivateConversation } from "@/hooks/use-chat";
 
 interface FriendsListProps {
   friends: User[];
@@ -17,17 +17,17 @@ interface FriendsListProps {
 export function FriendsList({ friends, isLoading, searchQuery = "" }: FriendsListProps) {
   const router = useRouter();
   const { mutate: removeFriend } = useRemoveFriend();
-  const { mutate: createConversation } = useCreateConversation();
+  const { mutate: getPrivateConversation } = useGetPrivateConversation();
 
   const filteredFriends = friends.filter(friend =>
     friend.displayName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const handleMessageFriend = (friendId: string) => {
-    // Tạo conversation mới với bạn này
-    createConversation([friendId], {
-      onSuccess: (newConversation) => {
-        router.push(`/messages/${newConversation.id}`);
+    // Lấy conversation private đã tồn tại
+    getPrivateConversation(friendId, {
+      onSuccess: (conversation) => {
+        router.push(`/messages/${conversation.id}`);
       },
     });
   };

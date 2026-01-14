@@ -75,10 +75,8 @@ export const userService = {
    * Get user profile by ID (with friends list and full info)
    */
   getUserProfile: async (userId: string) => {
-    console.log("Fetched user profile for userId:", userId);
-    const res = await api.get<User>(`/users/${userId}`);
-    console.log("Fetched user profile for userId:", userId, res.data);
-    return res.data;
+    const res = await api.get<{ success: boolean; user: User }>(`/users/${userId}`);
+    return res.data.user;
   },
 
   /**
