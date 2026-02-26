@@ -38,7 +38,7 @@ export default function ChatDetailPage() {
   } = useConversationDisplay(conversation, currentUserId);
 
   const { mutate: sendMessage, isPending } = useSendMessage();
-  const { socket, isConnected } = useSocket();
+  const { socket } = useSocket();
   const queryClient = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
@@ -59,16 +59,19 @@ export default function ChatDetailPage() {
     socket.emit("joinConversation", conversationId);
 
     const handleNewMessage = (newMessage: Message) => {
-      queryClient.setQueryData(["messages", conversationId], (oldData: any) => {
-        if (!oldData) return { messages: [newMessage] };
-        const exists = oldData.messages.some(
-          (msg: Message) => msg.id === newMessage.id,
-        );
-        if (exists) return oldData;
-        return {
-          messages: [...oldData.messages, newMessage],
-        };
-      });
+      queryClient.setQueryData(
+        ["messages", conversationId],
+        (oldData: { messages: Message[] } | undefined) => {
+          if (!oldData) return { messages: [newMessage] };
+          const exists = oldData.messages.some(
+            (msg: Message) => msg.id === newMessage.id,
+          );
+          if (exists) return oldData;
+          return {
+            messages: [...oldData.messages, newMessage],
+          };
+        },
+      );
 
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     };
@@ -139,7 +142,7 @@ export default function ChatDetailPage() {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white relative w-full overflow-hidden">
+    <div className="relative flex flex-col w-full h-full overflow-hidden bg-white">
       <ChatHeader
         name={conversationName}
         isOnline={isOnlineStatus}
@@ -147,11 +150,11 @@ export default function ChatDetailPage() {
       />
 
       <ScrollArea className="flex-1 p-3 md:p-6 bg-slate-50/30" ref={scrollRef}>
-        <div className="flex flex-col gap-4 w-full max-w-5xl mx-auto pb-4">
+        <div className="flex flex-col w-full max-w-5xl gap-4 pb-4 mx-auto">
           {isLoading ? (
             <MessageSkeleton />
           ) : error ? (
-            <div className="text-center py-8 text-slate-500">
+            <div className="py-8 text-center text-slate-500">
               Không thể tải tin nhắn
             </div>
           ) : messages && messages.length > 0 ? (
@@ -161,7 +164,8 @@ export default function ChatDetailPage() {
                 const messageSenderId =
                   typeof msg.senderId === "string"
                     ? msg.senderId
-                    : (msg.senderId as any)?._id || (msg.senderId as any)?.id;
+                    : (msg.senderId as { _id?: string; id?: string })?._id ||
+                      (msg.senderId as { _id?: string; id?: string })?.id;
                 const isMe = messageSenderId === currentUserId;
 
                 // Debug log
@@ -212,7 +216,7 @@ export default function ChatDetailPage() {
               )}
             </>
           ) : (
-            <div className="text-center py-8 text-slate-500">
+            <div className="py-8 text-center text-slate-500">
               Chưa có tin nhắn nào. Hãy bắt đầu cuộc trò chuyện!
             </div>
           )}

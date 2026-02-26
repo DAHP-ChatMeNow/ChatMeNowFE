@@ -5,7 +5,11 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function MainLayout({ children }: { children: React.ReactNode }) {
+export default function MainLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   const token = useAuthStore((state) => state.token);
   const router = useRouter();
 
@@ -22,28 +26,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   }
 
   return (
-    <div className="flex h-screen w-full bg-gradient-to-br from-slate-50 via-white to-slate-50/50 dark:bg-slate-900 overflow-hidden relative">
-      
-      <aside className="hidden md:flex w-[70px] lg:w-[80px] shrink-0 border-r border-slate-200/60 dark:border-slate-800 flex-col items-center py-4 bg-white/80 backdrop-blur-xl dark:bg-slate-950 z-50 shadow-lg">
+    <div className="flex h-screen w-full bg-gradient-to-br from-slate-50 via-white to-slate-50/50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950/50 overflow-hidden relative">
+      <aside className="hidden md:flex w-[70px] lg:w-[80px] shrink-0 border-r border-slate-200/60 dark:border-slate-700/50 flex-col items-center py-4 bg-white/80 backdrop-blur-xl dark:bg-slate-900/50 dark:backdrop-blur-xl z-50 shadow-lg dark:shadow-slate-950/50">
         <Sidebar mode="desktop" />
       </aside>
 
-      
       <main className="flex-1 min-w-0 h-full flex flex-col relative">
-        
-        
-        
-
-        
-        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-900">
-          
-          <div className="h-full w-full">
-            {children}
-          </div>
+        <div className="flex-1 overflow-y-auto overflow-x-hidden bg-white dark:bg-slate-900/50">
+          <div className="h-full w-full">{children}</div>
         </div>
 
-        
-        <nav className="md:hidden h-[65px] border-t border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-900/80 backdrop-blur-md px-6 flex items-center justify-around shrink-0 z-50">
+        <nav className="md:hidden h-[65px] border-t border-slate-100 dark:border-slate-700/50 bg-white/80 dark:bg-slate-900/95 backdrop-blur-md px-6 flex items-center justify-around shrink-0 z-50">
           <Sidebar mode="mobile" />
         </nav>
       </main>
