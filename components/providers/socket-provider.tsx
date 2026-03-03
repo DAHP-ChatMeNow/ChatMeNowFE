@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import { BASE_SOCKET_URL } from "@/types/utils";
 import { Notification } from "@/types/notification";
 
-const SOCKET_URL = BASE_SOCKET_URL || "http://localhost:5000";
+const SOCKET_URL = BASE_SOCKET_URL;
 
 // ✅ Socket event interfaces
 interface FriendRequestReceivedEvent {

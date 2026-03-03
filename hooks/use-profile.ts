@@ -70,6 +70,31 @@ export const useUpdateAvatar = () => {
   });
 };
 
+export const useDeleteAvatar = () => {
+  const queryClient = useQueryClient();
+  const { setAuth } = useAuthStore();
+
+  return useMutation({
+    mutationFn: userService.deleteAvatar,
+
+    onSuccess: (response) => {
+      const token = useAuthStore.getState().token;
+      if (token) {
+        setAuth(response.user, token);
+      }
+      // Invalidate tất cả queries liên quan
+      queryClient.invalidateQueries({ queryKey: ["profile"] });
+      queryClient.invalidateQueries({ queryKey: ["user"] });
+      queryClient.invalidateQueries({ queryKey: ["presigned-url"] });
+      toast.success(response.msg || "Avatar đã được xóa");
+    },
+
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể xóa avatar");
+    },
+  });
+};
+
 export const useUpdateCoverImage = () => {
   const queryClient = useQueryClient();
   const { setAuth } = useAuthStore();

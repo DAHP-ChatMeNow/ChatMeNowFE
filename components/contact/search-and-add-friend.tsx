@@ -39,9 +39,9 @@ function SearchResultItem({
     <div className="flex items-center justify-between p-4 transition-all duration-200 border border-gray-200 rounded-xl hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 hover:border-blue-300 hover:shadow-md">
       <div className="flex items-center gap-3">
         <Avatar className="w-12 h-12 ring-2 ring-blue-100">
-          {user.avatarUrl || user.avatar ? (
+          {user.avatar ? (
             <img
-              src={user.avatarUrl || user.avatar}
+              src={user.avatar}
               alt={user.displayName}
               className="object-cover w-full h-full"
             />

@@ -5,7 +5,6 @@ export interface User {
   displayName: string;
   bio?: string;
   avatar?: string;
-  avatarUrl?: string; // Full URL from backend
   coverImage?: string;
   language?: string;
   themeColor?: string;

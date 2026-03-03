@@ -17,7 +17,12 @@ export interface UploadAvatarResponse {
   success: boolean;
   message: string;
   user: User;
-  avatarUrl: string; // S3 key (e.g., "avatars/xxx.jpg") - use getPresignedUrl() to display
+  avatar: string; // S3 key (e.g., "avatars/xxx.jpg") - use getPresignedUrl() to display
+}
+
+export interface DeleteAvatarResponse {
+  msg: string;
+  user: User;
 }
 
 export interface PresignedUrlResponse {
@@ -26,13 +31,18 @@ export interface PresignedUrlResponse {
   expiresIn: number;
 }
 
+export interface GetProfileResponse {
+  success: boolean;
+  user: User;
+}
+
 export const userService = {
   /**
    * Get current user profile
    */
   getProfile: async () => {
-    const res = await api.get<User>("/users/profile");
-    return res.data;
+    const res = await api.get<GetProfileResponse>("/users/profile");
+    return res.data.user; // Extract user from response
   },
 
   /**
@@ -64,12 +74,20 @@ export const userService = {
   },
 
   /**
+   * Delete user avatar and reset to default
+   */
+  deleteAvatar: async () => {
+    const res = await api.delete<DeleteAvatarResponse>("/upload/avatar");
+    return res.data;
+  },
+
+  /**
    * Get presigned URL for viewing avatar/image
    * @param key - S3 object key (e.g., "avatars/1772192498360-hkg2p.jpg")
    */
   getPresignedUrl: async (key: string) => {
     const res = await api.get<PresignedUrlResponse>(
-      `/files/presign-get?key=${encodeURIComponent(key)}`,
+      `/upload/presign-get?key=${encodeURIComponent(key)}`,
     );
     return res.data;
   },
