@@ -1,8 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  output: "export", // Dòng này giúp xuất ra file tĩnh cho Mobile
+  // output: "export" chỉ dùng khi build cho Capacitor mobile (npx cap build)
+  // Bật dòng dưới khi cần xuất file tĩnh, tắt khi dev hoặc deploy lên server
+  ...(process.env.NEXT_EXPORT === "true" ? { output: "export" } : {}),
   images: {
-    unoptimized: true, // App Mobile không có Server Next.js để tối ưu ảnh tự động
+    unoptimized: true,
   },
 };
 
