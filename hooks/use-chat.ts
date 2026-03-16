@@ -29,6 +29,8 @@ type SendMessageContext = {
 };
 
 const getMessageSenderId = (message: Message): string | undefined => {
+  if (!message.senderId) return undefined;
+
   if (typeof message.senderId === "string") {
     return message.senderId;
   }

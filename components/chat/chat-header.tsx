@@ -9,7 +9,10 @@ import {
   Image as ImageIcon,
   Link2,
   Search as SearchIcon,
+  Palette,
+  Check,
   UserPlus,
+  UserCircle2,
   ShieldBan,
   Trash2,
   LogOut,
@@ -52,6 +55,41 @@ import { useContacts, useRemoveFriend } from "@/hooks/use-contact";
 import { useCreateConversation } from "@/hooks/use-chat";
 import { useVideoCall } from "@/components/providers/video-call-provider";
 
+type ChatBackgroundKey = "default" | "sky" | "sunset" | "mint" | "night";
+
+const CHAT_BACKGROUND_OPTIONS: Array<{
+  key: ChatBackgroundKey;
+  label: string;
+  previewClass: string;
+}> = [
+  {
+    key: "default",
+    label: "Mặc định",
+    previewClass: "bg-gradient-to-b from-white to-slate-50/40",
+  },
+  {
+    key: "sky",
+    label: "Xanh trời",
+    previewClass: "bg-gradient-to-br from-blue-50 via-white to-cyan-50",
+  },
+  {
+    key: "sunset",
+    label: "Hoàng hôn",
+    previewClass: "bg-gradient-to-br from-rose-50 via-amber-50 to-orange-100",
+  },
+  {
+    key: "mint",
+    label: "Bạc hà",
+    previewClass: "bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100",
+  },
+  {
+    key: "night",
+    label: "Đêm",
+    previewClass:
+      "bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950",
+  },
+];
+
 export function ChatHeader({
   name,
   isOnline,
@@ -88,6 +126,9 @@ export function ChatHeader({
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteSelectedIds, setInviteSelectedIds] = useState<string[]>([]);
   const [manageOpen, setManageOpen] = useState(false);
+  const [backgroundOpen, setBackgroundOpen] = useState(false);
+  const [selectedBackground, setSelectedBackground] =
+    useState<ChatBackgroundKey>("default");
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [dissolveConfirmOpen, setDissolveConfirmOpen] = useState(false);
 
@@ -162,13 +203,58 @@ export function ChatHeader({
     });
   };
 
+  const canOpenFriendProfile =
+    conversation?.type === "private" && Boolean(partnerId);
+
+  const handleOpenFriendProfile = () => {
+    if (!canOpenFriendProfile || !partnerId) return;
+    router.push(`/profile/${partnerId}`);
+  };
+
+  const openBackgroundPicker = () => {
+    if (typeof window !== "undefined" && currentId) {
+      const saved = localStorage.getItem(
+        `chat-background:${currentId}`,
+      ) as ChatBackgroundKey | null;
+      if (
+        saved &&
+        CHAT_BACKGROUND_OPTIONS.some((option) => option.key === saved)
+      ) {
+        setSelectedBackground(saved);
+      } else {
+        setSelectedBackground("default");
+      }
+    }
+    setBackgroundOpen(true);
+  };
+
+  const handleSelectBackground = (background: ChatBackgroundKey) => {
+    if (!currentId || typeof window === "undefined") return;
+
+    localStorage.setItem(`chat-background:${currentId}`, background);
+    setSelectedBackground(background);
+    window.dispatchEvent(
+      new CustomEvent("chat:background-change", {
+        detail: { conversationId: currentId, background },
+      }),
+    );
+  };
+
   return (
     <>
       <div className="h-[70px] md:h-[80px] border-b border-slate-200/60 bg-white/80 backdrop-blur-xl sticky top-0 z-30 shadow-sm px-3 md:px-6">
         <div className="flex items-center justify-between w-full max-w-[1240px] h-full mx-auto">
-          <div className="flex items-center min-w-0 gap-2 md:gap-3">
+          <div
+            onClick={handleOpenFriendProfile}
+            className={`flex items-center min-w-0 gap-2 md:gap-3 ${
+              canOpenFriendProfile ? "cursor-pointer" : "cursor-default"
+            }`}
+          >
             <button
-              onClick={() => router.push("/messages")}
+              onClick={(event) => {
+                event.stopPropagation();
+                router.push("/messages");
+              }}
               className="p-2 -ml-2 transition-colors rounded-full md:hidden hover:bg-slate-100"
             >
               <ChevronLeft className="w-6 h-6 text-slate-600" />
@@ -258,11 +344,24 @@ export function ChatHeader({
                 >
                   <SearchIcon className="text-slate-500" /> Tìm kiếm tin nhắn
                 </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  onClick={openBackgroundPicker}
+                >
+                  <Palette className="text-slate-500" /> Đổi background
+                </DropdownMenuItem>
                 <DropdownMenuSeparator />
 
                 {/* Private chat options */}
                 {conversation?.type === "private" && (
                   <>
+                    <DropdownMenuItem
+                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      onClick={handleOpenFriendProfile}
+                    >
+                      <UserCircle2 className="text-slate-500" /> Xem trang cá
+                      nhân
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
                       onClick={() => {
@@ -445,6 +544,51 @@ export function ChatHeader({
               {dissolveMutation.isPending ? "Đang giải tán..." : "Giải tán"}
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={backgroundOpen} onOpenChange={setBackgroundOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Đổi background đoạn chat</DialogTitle>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-3">
+            {CHAT_BACKGROUND_OPTIONS.map((option) => {
+              const isSelected = selectedBackground === option.key;
+
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => handleSelectBackground(option.key)}
+                  className={`relative h-20 rounded-xl border transition-all ${
+                    isSelected
+                      ? "border-blue-500 ring-2 ring-blue-200"
+                      : "border-slate-200 hover:border-slate-300"
+                  } ${option.previewClass}`}
+                >
+                  <span
+                    className={`absolute inset-0 rounded-xl ${
+                      option.key === "night" ? "bg-black/10" : ""
+                    }`}
+                  />
+                  <span
+                    className={`absolute left-2 bottom-2 text-xs font-semibold ${
+                      option.key === "night" ? "text-white" : "text-slate-700"
+                    }`}
+                  >
+                    {option.label}
+                  </span>
+                  {isSelected && (
+                    <span className="absolute top-2 right-2 p-1 rounded-full bg-blue-600 text-white">
+                      <Check className="w-3 h-3" />
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </DialogContent>
       </Dialog>
     </>

@@ -32,7 +32,7 @@ export function formatMessageTime(
 
   // Just now (< 1 minute)
   if (diffMins < 1) {
-    return "Now";
+    return "now";
   }
 
   // X minutes ago (< 1 hour)

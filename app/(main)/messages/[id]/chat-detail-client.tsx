@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useEffect, useState, useCallback } from "react";
+import { PhoneCall, PhoneMissed, PhoneOff } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
@@ -19,7 +20,93 @@ import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import { useQueryClient } from "@tanstack/react-query";
 import { chatService, MessagesResponse } from "@/api/chat";
 
+type ChatBackgroundKey = "default" | "sky" | "sunset" | "mint" | "night";
+
+const CHAT_BACKGROUND_CLASS: Record<ChatBackgroundKey, string> = {
+  default: "bg-gradient-to-b from-white to-slate-50/40",
+  sky: "bg-gradient-to-br from-blue-50 via-white to-cyan-50",
+  sunset: "bg-gradient-to-br from-rose-50 via-amber-50 to-orange-100",
+  mint: "bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-100",
+  night: "bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950",
+};
+
+const normalizeCallStatus = (msg: Message): string => {
+  const status = msg.callInfo?.status?.toLowerCase();
+  if (status) return status;
+
+  const text = (msg.content || "").toLowerCase();
+  if (text === "ended" || text === "rejected" || text === "missed") {
+    return text;
+  }
+
+  if (text.includes("nhỡ") || text.includes("nho")) return "missed";
+  if (text.includes("từ chối") || text.includes("tu choi")) return "rejected";
+  return "ended";
+};
+
+const getSystemCallStyle = (status: string) => {
+  const text = status.toLowerCase();
+
+  if (text.includes("nhỡ") || text.includes("nho")) {
+    return {
+      Icon: PhoneMissed,
+      iconClass: "bg-rose-100 text-rose-600",
+      bubbleClass: "border-rose-100",
+    };
+  }
+
+  if (text.includes("từ chối") || text.includes("tu choi")) {
+    return {
+      Icon: PhoneOff,
+      iconClass: "bg-amber-100 text-amber-600",
+      bubbleClass: "border-amber-100",
+    };
+  }
+
+  return {
+    Icon: PhoneCall,
+    iconClass: "bg-blue-100 text-blue-600",
+    bubbleClass: "border-blue-100",
+  };
+};
+
+const getSystemCallTitle = (status: string) => {
+  const text = status.toLowerCase();
+
+  if (text.includes("missed")) return "Cuộc gọi nhỡ";
+  if (text.includes("rejected")) return "Cuộc gọi bị từ chối";
+  return "Cuộc gọi kết thúc";
+};
+
+const formatCallDuration = (seconds?: number) => {
+  if (!seconds || seconds <= 0) return "0s";
+
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+
+  if (mins <= 0) return `${secs}s`;
+  return `${mins}m ${secs}s`;
+};
+
+const getSystemCallDescription = (msg: Message, status: string) => {
+  if (status === "missed") return "Không được trả lời";
+  if (status === "rejected") return "Cuộc gọi đã bị từ chối";
+
+  return `Thời lượng ${formatCallDuration(msg.callInfo?.duration)}`;
+};
+
+const getSystemCallTime = (msg: Message) => {
+  const value = msg.callInfo?.endedAt || msg.createdAt;
+
+  return new Date(value).toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const getMessageSenderId = (message: Message): string | undefined => {
+  if (!message.senderId) return undefined;
+
   if (typeof message.senderId === "string") {
     return message.senderId;
   }
@@ -66,6 +153,8 @@ export default function ChatDetailClient() {
   const isMountedRef = useRef(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [backgroundKey, setBackgroundKey] =
+    useState<ChatBackgroundKey>("default");
 
   const getMessageId = useCallback((message: Message): string | undefined => {
     return message.id || message._id;
@@ -106,6 +195,52 @@ export default function ChatDetailClient() {
     isLoadingOlderRef.current = false;
     setIsLoadingOlder(false);
     beforeIdRef.current = null;
+  }, [conversationId]);
+
+  useEffect(() => {
+    if (!conversationId || typeof window === "undefined") {
+      setBackgroundKey("default");
+      return;
+    }
+
+    const saved = localStorage.getItem(
+      `chat-background:${conversationId}`,
+    ) as ChatBackgroundKey | null;
+
+    if (saved && saved in CHAT_BACKGROUND_CLASS) {
+      setBackgroundKey(saved);
+    } else {
+      setBackgroundKey("default");
+    }
+  }, [conversationId]);
+
+  useEffect(() => {
+    const handleBackgroundChange = (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        conversationId?: string;
+        background?: ChatBackgroundKey;
+      }>;
+
+      const targetConversationId = customEvent.detail?.conversationId;
+      const background = customEvent.detail?.background;
+
+      if (
+        targetConversationId === conversationId &&
+        background &&
+        background in CHAT_BACKGROUND_CLASS
+      ) {
+        setBackgroundKey(background);
+      }
+    };
+
+    window.addEventListener("chat:background-change", handleBackgroundChange);
+
+    return () => {
+      window.removeEventListener(
+        "chat:background-change",
+        handleBackgroundChange,
+      );
+    };
   }, [conversationId]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -347,7 +482,7 @@ export default function ChatDetailClient() {
       />
 
       <ScrollArea
-        className="flex-1 min-h-0 bg-gradient-to-b from-white to-slate-50/40"
+        className={`flex-1 min-h-0 ${CHAT_BACKGROUND_CLASS[backgroundKey]}`}
         ref={scrollRef}
       >
         <div className="w-full max-w-[1240px] px-3 py-4 md:px-6 md:py-6 xl:px-10 mx-auto">
@@ -366,6 +501,78 @@ export default function ChatDetailClient() {
                   </div>
                 )}
                 {messages.map((msg: Message) => {
+                  if (msg.type === "system") {
+                    const callStatus = normalizeCallStatus(msg);
+                    const callStyle = getSystemCallStyle(callStatus);
+                    const callTitle = getSystemCallTitle(callStatus);
+                    const callDescription = getSystemCallDescription(
+                      msg,
+                      callStatus,
+                    );
+                    const systemSenderId = getMessageSenderId(msg);
+                    const isMySystemMessage =
+                      !!systemSenderId && systemSenderId === currentUserId;
+
+                    return (
+                      <div
+                        key={msg.id || msg._id}
+                        className={`flex items-end gap-2 ${
+                          isMySystemMessage ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        {!isMySystemMessage && (
+                          <div
+                            className={`h-8 w-8 rounded-full flex items-center justify-center ${callStyle.iconClass}`}
+                          >
+                            <callStyle.Icon className="w-4 h-4" />
+                          </div>
+                        )}
+
+                        <div
+                          className={`px-3.5 py-2 rounded-2xl shadow-sm max-w-[84%] md:max-w-[60%] border ${
+                            isMySystemMessage
+                              ? "bg-blue-600 text-white rounded-br-none border-blue-600"
+                              : `bg-white text-slate-800 rounded-bl-none ${callStyle.bubbleClass}`
+                          }`}
+                        >
+                          <p
+                            className={`text-[13px] font-semibold ${
+                              isMySystemMessage
+                                ? "text-white"
+                                : "text-slate-800"
+                            }`}
+                          >
+                            {callTitle}
+                          </p>
+                          <p
+                            className={`mt-0.5 text-[11px] ${
+                              isMySystemMessage
+                                ? "text-blue-100"
+                                : "text-slate-600"
+                            }`}
+                          >
+                            {callDescription}
+                          </p>
+                          <p
+                            className={`mt-0.5 text-[10px] ${
+                              isMySystemMessage
+                                ? "text-blue-100"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {getSystemCallTime(msg)}
+                          </p>
+                        </div>
+
+                        {isMySystemMessage && (
+                          <div className="h-8 w-8 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-600">
+                            <callStyle.Icon className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
                   const messageSenderId = getMessageSenderId(msg);
                   const isMe = messageSenderId === currentUserId;
 

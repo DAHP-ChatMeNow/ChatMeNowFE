@@ -104,6 +104,8 @@ type RealtimeMessagePayload = Partial<Message> & {
 };
 
 const getMessageSenderId = (message: Message): string | undefined => {
+  if (!message.senderId) return undefined;
+
   if (typeof message.senderId === "string") {
     return message.senderId;
   }
@@ -348,6 +350,11 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
       queryClient.setQueriesData<User | undefined>(
         { queryKey: ["partner"] },
+        (oldUser) => applyPresenceToUser(oldUser, presence),
+      );
+
+      queryClient.setQueriesData<User | undefined>(
+        { queryKey: ["friend-profile"] },
         (oldUser) => applyPresenceToUser(oldUser, presence),
       );
 
