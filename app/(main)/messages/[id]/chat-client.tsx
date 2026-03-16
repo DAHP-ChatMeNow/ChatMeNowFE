@@ -34,6 +34,7 @@ export default function ChatDetailPage() {
     displayName: conversationName,
     avatar: conversationAvatar,
     isOnline: isOnlineStatus,
+    statusText,
   } = useConversationDisplay(conversation, currentUserId);
 
   const { mutate: sendMessage, isPending } = useSendMessage();
@@ -124,6 +125,7 @@ export default function ChatDetailPage() {
         name={conversationName}
         isOnline={isOnlineStatus}
         avatar={conversationAvatar}
+        statusText={statusText}
       />
 
       <ScrollArea className="flex-1 p-3 md:p-6 bg-slate-50/30" ref={scrollRef}>

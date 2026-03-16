@@ -56,10 +56,12 @@ export function ChatHeader({
   name,
   isOnline,
   avatar,
+  statusText,
 }: {
   name?: string;
   isOnline?: boolean;
   avatar?: string;
+  statusText?: string;
 }) {
   const router = useRouter();
   const params = useParams();
@@ -162,142 +164,164 @@ export function ChatHeader({
 
   return (
     <>
-      <div className="h-[70px] md:h-[80px] border-b border-slate-200/60 flex items-center justify-between px-5 bg-white/80 backdrop-blur-xl sticky top-0 z-30 shadow-sm">
-        <div className="flex items-center gap-2 md:gap-3">
-          <button
-            onClick={() => router.push("/messages")}
-            className="p-2 -ml-2 transition-colors rounded-full md:hidden hover:bg-slate-100"
-          >
-            <ChevronLeft className="w-6 h-6 text-slate-600" />
-          </button>
+      <div className="h-[70px] md:h-[80px] border-b border-slate-200/60 bg-white/80 backdrop-blur-xl sticky top-0 z-30 shadow-sm px-3 md:px-6">
+        <div className="flex items-center justify-between w-full max-w-[1240px] h-full mx-auto">
+          <div className="flex items-center min-w-0 gap-2 md:gap-3">
+            <button
+              onClick={() => router.push("/messages")}
+              className="p-2 -ml-2 transition-colors rounded-full md:hidden hover:bg-slate-100"
+            >
+              <ChevronLeft className="w-6 h-6 text-slate-600" />
+            </button>
 
-          <div className="relative">
-            <Avatar className="border-2 border-white shadow-lg h-11 w-11 md:h-12 md:w-12 ring-1 ring-slate-100">
-              <AvatarImage src={avatar} />
-              <AvatarFallback className="font-bold text-white bg-gradient-to-br from-blue-400 to-blue-600">
-                {(displayName || "U").charAt(0).toUpperCase()}
-              </AvatarFallback>
-            </Avatar>
-            {isOnline && (
-              <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full shadow-sm" />
-            )}
+            <div className="relative shrink-0">
+              <Avatar className="border-2 border-white shadow-lg h-11 w-11 md:h-12 md:w-12 ring-1 ring-slate-100">
+                <AvatarImage src={avatar} />
+                <AvatarFallback className="font-bold text-white bg-gradient-to-br from-blue-400 to-blue-600">
+                  {(displayName || "U").charAt(0).toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              {isOnline && (
+                <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-white rounded-full shadow-sm" />
+              )}
+            </div>
+
+            <div className="flex flex-col min-w-0">
+              <h2 className="text-base font-bold leading-tight truncate text-slate-900 md:text-lg">
+                {displayName}
+              </h2>
+              <p className="text-[11px] md:text-[12px] text-slate-400 font-medium truncate">
+                {statusText || (isOnline ? "Đang hoạt động" : "Vừa truy cập")}
+              </p>
+            </div>
           </div>
 
-          <div className="flex flex-col">
-            <h2 className="text-base font-bold leading-tight text-slate-900 md:text-lg">
-              {displayName}
-            </h2>
-            <p className="text-[11px] md:text-[12px] text-slate-400 font-medium">
-              {isOnline ? "Đang hoạt động" : "Vừa truy cập"}
-            </p>
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              disabled={!canCall}
+              onClick={() => {
+                void handleStartCall("audio");
+              }}
+              className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={canCall ? "Gọi audio" : "Chi ho tro trong chat ca nhan"}
+            >
+              <Phone className="w-5 h-5" />
+            </button>
+            <button
+              disabled={!canCall}
+              onClick={() => {
+                void handleStartCall("video");
+              }}
+              className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={canCall ? "Gọi video" : "Chi ho tro trong chat ca nhan"}
+            >
+              <Video className="w-5 h-5" />
+            </button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="p-2.5 text-slate-400 hover:bg-slate-100 rounded-xl transition-all duration-200">
+                  <MoreVertical className="w-5 h-5" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent
+                align="end"
+                sideOffset={8}
+                className="w-64 rounded-xl border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xl p-1.5"
+              >
+                <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase">
+                  Tùy chọn chat
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  onClick={() => {
+                    setSheetTab("media");
+                    setSheetOpen(true);
+                  }}
+                >
+                  <ImageIcon className="text-slate-500" /> Xem hình ảnh đã gửi
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  onClick={() => {
+                    setSheetTab("links");
+                    setSheetOpen(true);
+                  }}
+                >
+                  <Link2 className="text-slate-500" /> Xem link đã gửi
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  onClick={() => {
+                    setSheetTab("search");
+                    setSheetOpen(true);
+                  }}
+                >
+                  <SearchIcon className="text-slate-500" /> Tìm kiếm tin nhắn
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+
+                {/* Private chat options */}
+                {conversation?.type === "private" && (
+                  <>
+                    <DropdownMenuItem
+                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      onClick={() => {
+                        if (partnerId) {
+                          setSelectedIds([partnerId]);
+                        } else {
+                          setSelectedIds([]);
+                        }
+                        setGroupOpen(true);
+                      }}
+                    >
+                      <UserPlus className="text-slate-500" /> Tạo nhóm với người
+                      này
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      onClick={() => {
+                        if (partnerId) {
+                          removeFriendMutation.mutate(partnerId);
+                        }
+                      }}
+                    >
+                      <ShieldBan className="text-red-500" /> Chặn bạn bè
+                    </DropdownMenuItem>
+                  </>
+                )}
+
+                {/* Group chat options */}
+                {conversation?.type === "group" && (
+                  <>
+                    <DropdownMenuItem
+                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      onClick={() => setInviteOpen(true)}
+                    >
+                      <UserPlus className="text-slate-500" /> Mời bạn bè vào
+                      nhóm
+                    </DropdownMenuItem>
+                    {isAdmin && (
+                      <>
+                        <DropdownMenuItem
+                          className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                          onClick={() => setManageOpen(true)}
+                        >
+                          <Trash2 className="text-slate-500" /> Quản lý thành
+                          viên
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          className="h-10 rounded-lg px-3 text-[15px] font-medium text-red-600 focus:text-red-700"
+                          onClick={() => setDissolveConfirmOpen(true)}
+                        >
+                          <LogOut className="text-red-500" /> Giải tán nhóm
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            disabled={!canCall}
-            onClick={() => {
-              void handleStartCall("audio");
-            }}
-            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={canCall ? "Gọi audio" : "Chi ho tro trong chat ca nhan"}
-          >
-            <Phone className="w-5 h-5" />
-          </button>
-          <button
-            disabled={!canCall}
-            onClick={() => {
-              void handleStartCall("video");
-            }}
-            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
-            title={canCall ? "Gọi video" : "Chi ho tro trong chat ca nhan"}
-          >
-            <Video className="w-5 h-5" />
-          </button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <button className="p-2.5 text-slate-400 hover:bg-slate-100 rounded-xl transition-all duration-200">
-                <MoreVertical className="w-5 h-5" />
-              </button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-60">
-              <DropdownMenuLabel>Tùy chọn chat</DropdownMenuLabel>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSheetTab("media");
-                  setSheetOpen(true);
-                }}
-              >
-                <ImageIcon className="text-slate-500" /> Xem hình ảnh đã gửi
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSheetTab("links");
-                  setSheetOpen(true);
-                }}
-              >
-                <Link2 className="text-slate-500" /> Xem link đã gửi
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => {
-                  setSheetTab("search");
-                  setSheetOpen(true);
-                }}
-              >
-                <SearchIcon className="text-slate-500" /> Tìm kiếm tin nhắn
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-
-              {/* Private chat options */}
-              {conversation?.type === "private" && (
-                <>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (partnerId) {
-                        setSelectedIds([partnerId]);
-                      } else {
-                        setSelectedIds([]);
-                      }
-                      setGroupOpen(true);
-                    }}
-                  >
-                    <UserPlus className="text-slate-500" /> Tạo nhóm với người
-                    này
-                  </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => {
-                      if (partnerId) {
-                        removeFriendMutation.mutate(partnerId);
-                      }
-                    }}
-                  >
-                    <ShieldBan className="text-red-500" /> Chặn bạn bè
-                  </DropdownMenuItem>
-                </>
-              )}
-
-              {/* Group chat options */}
-              {conversation?.type === "group" && (
-                <>
-                  <DropdownMenuItem onClick={() => setInviteOpen(true)}>
-                    <UserPlus className="text-slate-500" /> Mời bạn bè vào nhóm
-                  </DropdownMenuItem>
-                  {isAdmin && (
-                    <>
-                      <DropdownMenuItem onClick={() => setManageOpen(true)}>
-                        <Trash2 className="text-slate-500" /> Quản lý thành viên
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={() => setDissolveConfirmOpen(true)}
-                      >
-                        <LogOut className="text-red-500" /> Giải tán nhóm
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
       <MessagesSideSheet

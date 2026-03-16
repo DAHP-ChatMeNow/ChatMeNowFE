@@ -12,6 +12,7 @@ export interface User {
   themeColor?: string;
   isOnline: boolean;
   lastSeen?: Date;
+  lastSeenText?: string;
   friends: string[];
   createdAt: Date;
 }

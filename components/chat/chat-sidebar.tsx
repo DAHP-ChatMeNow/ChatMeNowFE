@@ -154,7 +154,7 @@ export function ChatSidebar() {
         <div className="relative">
           <Search className="absolute w-4 h-4 -translate-y-1/2 left-4 top-1/2 text-slate-400" />
           <Input
-            placeholder="Search messages..."
+            placeholder="Tìm kiếm đoạn chat..."
             className="bg-white border shadow-sm pl-11 border-slate-200/80 h-11 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/20"
           />
         </div>
