@@ -50,10 +50,6 @@ interface FriendRequestRejectedEvent {
   requestId: string;
 }
 
-interface FriendRequestRemovedEvent {
-  requestId: string;
-}
-
 interface FriendListUpdatedEvent {
   newFriend: {
     _id: string;
@@ -62,10 +58,6 @@ interface FriendListUpdatedEvent {
     bio?: string;
     isOnline?: boolean;
   };
-}
-
-interface FriendRemovedEvent {
-  removedFriendId: string;
 }
 
 interface SocketContextType {
@@ -104,14 +96,24 @@ export function SocketProvider({ children }: SocketProviderProps) {
       return;
     }
 
+    if (!SOCKET_URL) {
+      console.error("[socket] Ket noi that bai: thieu NEXT_PUBLIC_SOCKET_URL");
+      return;
+    }
+
     const socketInstance = io(SOCKET_URL, {
       auth: { token },
       transports: ["websocket", "polling"],
+      withCredentials: true,
     });
 
     socketInstance.on("connect", () => {
       socketInstance.emit("setup", userId);
       setIsConnected(true);
+      console.info("[socket] Ket noi thanh cong", {
+        socketId: socketInstance.id,
+        websocketUrl: SOCKET_URL,
+      });
     });
 
     socketInstance.on("connected", () => {
@@ -120,10 +122,17 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
     socketInstance.on("disconnect", () => {
       setIsConnected(false);
+      console.warn("[socket] Da ngat ket noi", {
+        websocketUrl: SOCKET_URL,
+      });
     });
 
-    socketInstance.on("connect_error", () => {
+    socketInstance.on("connect_error", (error: Error) => {
       setIsConnected(false);
+      console.error("[socket] Ket noi that bai", {
+        websocketUrl: SOCKET_URL,
+        message: error?.message || "Unknown error",
+      });
     });
 
     socketInstance.on(
@@ -157,13 +166,10 @@ export function SocketProvider({ children }: SocketProviderProps) {
       },
     );
 
-    socketInstance.on(
-      "friend_request_removed",
-      (_data: FriendRequestRemovedEvent) => {
-        queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
-        toast.success("Đã từ chối lời mời kết bạn");
-      },
-    );
+    socketInstance.on("friend_request_removed", () => {
+      queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
+      toast.success("Đã từ chối lời mời kết bạn");
+    });
 
     socketInstance.on("friend_list_updated", (data: FriendListUpdatedEvent) => {
       queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
@@ -173,7 +179,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       );
     });
 
-    socketInstance.on("friend_removed", (_data: FriendRemovedEvent) => {
+    socketInstance.on("friend_removed", () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
       toast.info("Một người bạn đã xóa bạn khỏi danh sách");
     });
