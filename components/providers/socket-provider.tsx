@@ -98,7 +98,9 @@ export function SocketProvider({ children }: SocketProviderProps) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!token || !user?._id) {
+    const userId = user?._id || user?.id;
+
+    if (!token || !userId) {
       return;
     }
 
@@ -108,7 +110,6 @@ export function SocketProvider({ children }: SocketProviderProps) {
     });
 
     socketInstance.on("connect", () => {
-      const userId = user._id || user.id;
       socketInstance.emit("setup", userId);
       setIsConnected(true);
     });
@@ -212,7 +213,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socketRef.current = null;
       setIsConnected(false);
     };
-  }, [token, user, queryClient]);
+  }, [token, user?._id, user?.id, queryClient]);
 
   return (
     <SocketContext.Provider value={{ socket: socketRef, isConnected }}>
