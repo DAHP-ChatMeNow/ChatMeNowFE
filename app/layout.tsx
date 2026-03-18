@@ -35,15 +35,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi" suppressHydrationWarning>
+    <html lang="vi" className="light" suppressHydrationWarning>
       <body
         className={`${montserrat.variable} ${roboto.variable} font-sans antialiased`}
+        style={{ colorScheme: "light" }}
         suppressHydrationWarning
       >
         <ThemeProvider
           attribute="class"
-          defaultTheme="system"
-          enableSystem
+          defaultTheme="light"
+          forcedTheme="light"
+          enableSystem={false}
           disableTransitionOnChange
         >
           <LanguageProvider>
