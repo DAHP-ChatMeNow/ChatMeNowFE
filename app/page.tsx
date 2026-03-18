@@ -36,7 +36,7 @@ export default function HomePage() {
   }
 
   return (
-    <div className="min-h-screen bg-white pb-24 sm:pb-0">
+    <div className="min-h-screen bg-white">
       <div>
         {/* Navigation */}
         <nav className="sticky top-0 left-0 right-0 z-50 hidden border-b sm:block bg-white/95 backdrop-blur-md border-slate-200">
@@ -461,10 +461,10 @@ export default function HomePage() {
       </div>
 
       {/* Mobile floating login CTA */}
-      <div className="fixed bottom-0 left-0 right-0 z-50 p-3 border-t bg-white/95 backdrop-blur-md border-slate-200 sm:hidden">
-        <div className="mx-auto w-full max-w-sm">
+      <div className="fixed left-3 right-3 z-50 sm:hidden bottom-[calc(env(safe-area-inset-bottom)+12px)] pointer-events-none">
+        <div className="mx-auto w-full max-w-sm pointer-events-auto">
           <Link href="/login" className="block">
-            <Button className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 rounded-xl">
+            <Button className="w-full h-12 text-base font-semibold bg-blue-600 hover:bg-blue-700 rounded-2xl shadow-xl shadow-blue-600/30">
               Đăng nhập
             </Button>
           </Link>
