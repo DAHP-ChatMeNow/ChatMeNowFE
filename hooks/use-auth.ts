@@ -13,6 +13,7 @@ import {
 } from "@/api/auth";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useEffect } from "react";
+import { getDefaultRouteForClient } from "@/lib/default-route";
 
 const getErrorMessage = (error: unknown) => {
   if (isAxiosError(error)) {
@@ -39,7 +40,7 @@ export const useLogin = () => {
       }
       setAuth(data.user, data.token, data.role);
       toast.success(data.message ?? "Đăng nhập thành công");
-      router.push("/messages");
+      router.push(getDefaultRouteForClient());
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { getDefaultRouteForUserAgent } from "@/lib/default-route";
 
 export function middleware(request: NextRequest) {
   const host = request.headers.get("host") || "";
@@ -9,6 +10,8 @@ export function middleware(request: NextRequest) {
   const token = request.cookies.get("auth-token")?.value;
   const role = request.cookies.get("user-role")?.value;
   const { pathname } = request.nextUrl;
+  const userAgent = request.headers.get("user-agent") ?? "";
+  const defaultUserRoute = getDefaultRouteForUserAgent(userAgent);
 
   // ============ ADMIN PORTAL (admin.* / admin-dev.*) ============
   if (isAdminPortal) {
@@ -94,9 +97,14 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
+  // Logged in at root path → redirect by device type
+  if (token && pathname === "/") {
+    return NextResponse.redirect(new URL(defaultUserRoute, request.url));
+  }
+
   // Logged in visiting public route → redirect to dashboard
   if (token && isPublicRoute) {
-    return NextResponse.redirect(new URL("/messages", request.url));
+    return NextResponse.redirect(new URL(defaultUserRoute, request.url));
   }
 
   return NextResponse.next();

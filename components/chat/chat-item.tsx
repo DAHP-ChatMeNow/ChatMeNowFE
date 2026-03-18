@@ -25,17 +25,17 @@ export function ChatItem({
   return (
     <Link href={`/messages/${id}`}>
       <div
-        className={`flex items-center gap-3 p-3.5 mx-3 rounded-2xl cursor-pointer transition-all duration-200 ${
+        className={`flex items-center gap-3 p-3 mx-2 md:mx-3 rounded-2xl cursor-pointer border transition-colors duration-150 ${
           isActive
-            ? "bg-gradient-to-r from-blue-50 to-blue-100/50 shadow-md shadow-blue-100/50 scale-[1.02]"
-            : "hover:bg-white hover:shadow-md hover:scale-[1.01]"
+            ? "bg-blue-50/80 border-blue-200 shadow-sm"
+            : "bg-transparent border-slate-100 hover:bg-white hover:border-slate-200"
         }`}
       >
         <div className="relative">
           <PresignedAvatar
             avatarKey={avatar}
             displayName={name}
-            className="h-12 w-12 border-2 border-white shadow-lg ring-1 ring-slate-100"
+            className="h-11 w-11 border-2 border-white shadow-sm ring-1 ring-slate-100"
             fallbackClassName="bg-slate-200 text-slate-600 font-bold text-xs"
           />
         </div>
@@ -43,7 +43,7 @@ export function ChatItem({
         <div className="flex-1 min-w-0">
           <div className="flex justify-between items-baseline mb-0.5">
             <h4
-              className={`text-[14.5px] truncate ${isActive ? "text-blue-600 font-bold" : "font-semibold text-slate-900"}`}
+              className={`text-[15px] truncate ${isActive ? "text-blue-700 font-bold" : "font-semibold text-slate-900"}`}
             >
               {name}
             </h4>

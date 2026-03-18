@@ -12,8 +12,6 @@ import {
   Plus,
   X,
   Play,
-  ChevronLeft,
-  ChevronRight,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
@@ -32,6 +30,7 @@ import { BlogSkeleton } from "@/components/skeletons/blog-skeleton";
 import { useAuthStore } from "@/store/use-auth-store";
 import { Post, PostMedia } from "@/types/post";
 import { toast } from "sonner";
+import { PostMediaLightbox } from "@/components/post/post-media-lightbox";
 
 type MediaPreview = {
   url: string;
@@ -59,26 +58,6 @@ const getVideoDuration = (file: File): Promise<number> =>
       resolve(0);
     };
   });
-
-function formatPostTime(date: Date | string): string {
-  const d = typeof date === "string" ? new Date(date) : date;
-  const diffMs = Date.now() - d.getTime();
-  const diffSec = Math.floor(diffMs / 1000);
-  if (diffSec < 60) return "Vừa xong";
-  const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return `${diffMin} phút trước`;
-  const diffHour = Math.floor(diffMin / 60);
-  if (diffHour < 24) return `${diffHour} giờ trước`;
-  const diffDay = Math.floor(diffHour / 24);
-  if (diffDay < 7) return `${diffDay} ngày trước`;
-  // older → dd/MM/yyyy HH:mm
-  const hh = String(d.getHours()).padStart(2, "0");
-  const mm = String(d.getMinutes()).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  const mo = String(d.getMonth() + 1).padStart(2, "0");
-  const yyyy = d.getFullYear();
-  return `${hh}:${mm} ${dd}/${mo}/${yyyy}`;
-}
 
 export default function BlogPage() {
   const [postContent, setPostContent] = useState("");
@@ -235,12 +214,12 @@ export default function BlogPage() {
   );
 
   return (
-    <div className="flex flex-col w-full h-full bg-slate-50/50">
-      <ScrollArea className="flex-1 w-full">
-        <div className="max-w-3xl mx-auto px-4 py-4 space-y-6 md:py-8 md:px-6">
+    <div className="flex flex-col w-full h-full max-w-full overflow-x-hidden bg-slate-50/50">
+      <ScrollArea className="flex-1 w-full min-w-0">
+        <div className="w-full max-w-3xl min-w-0 px-0 py-0 pb-8 mx-auto space-y-4 overflow-x-hidden md:max-w-3xl md:py-6 md:px-6 lg:max-w-4xl">
           {/* Create Post */}
-          <div className="p-4 space-y-4 bg-white border shadow-sm md:p-6 rounded-2xl border-slate-100">
-            <div className="flex gap-3 md:gap-4">
+          <div className="p-4 space-y-4 bg-white border-0 rounded-none shadow-sm md:p-6 md:rounded-2xl md:border border-slate-100">
+            <div className="flex min-w-0 gap-3 md:gap-4">
               <PresignedAvatar
                 avatarKey={user?.avatar}
                 displayName={user?.displayName}
@@ -252,7 +231,7 @@ export default function BlogPage() {
                 value={postContent}
                 onChange={(e) => setPostContent(e.target.value)}
                 disabled={isCreatingPost}
-                className="flex-1 border-none bg-slate-50 rounded-xl resize-none focus-visible:ring-0 min-h-[80px] md:min-h-[100px] text-sm md:text-base p-3"
+                className="flex-1 min-w-0 border-none bg-slate-50 rounded-xl resize-none focus-visible:ring-0 min-h-[80px] md:min-h-[100px] text-sm md:text-base p-3"
               />
             </div>
             {/* Media Previews */}
@@ -261,7 +240,7 @@ export default function BlogPage() {
                 {mediaPreviews.map((preview, idx) => (
                   <div
                     key={idx}
-                    className="relative rounded-xl overflow-hidden aspect-square bg-slate-100 group"
+                    className="relative overflow-hidden rounded-xl aspect-square bg-slate-100 group"
                   >
                     {preview.type === "image" ? (
                       <img
@@ -282,7 +261,7 @@ export default function BlogPage() {
                     )}
                     <button
                       onClick={() => removeMedia(idx)}
-                      className="absolute top-1 right-1 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
+                      className="absolute flex items-center justify-center w-6 h-6 transition-colors rounded-full top-1 right-1 bg-black/60 hover:bg-black/80"
                     >
                       <X className="w-3.5 h-3.5 text-white" />
                     </button>
@@ -303,7 +282,7 @@ export default function BlogPage() {
                 <span className="text-xs md:text-sm">
                   Ảnh/Video
                   {mediaFiles.length > 0 && (
-                    <span className="ml-1 text-blue-500 font-semibold">
+                    <span className="ml-1 font-semibold text-blue-500">
                       ({mediaFiles.length})
                     </span>
                   )}
@@ -338,13 +317,13 @@ export default function BlogPage() {
           </div>
 
           {/* Stories */}
-          <div className="bg-white border shadow-sm rounded-2xl border-slate-100 p-2 md:p-4">
-            <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
+          <div className="p-2 min-w-0 bg-white border shadow-sm rounded-2xl border-slate-100 md:p-4">
+            <div className="flex w-full min-w-0 gap-2 pb-2 overflow-x-auto scrollbar-hide">
               {/* Create Story */}
               <button className="relative flex-shrink-0 w-[110px] h-[190px] md:w-[120px] md:h-[200px] rounded-xl overflow-hidden group bg-gradient-to-b from-slate-100 to-slate-200 dark:from-slate-800 dark:to-slate-900 hover:scale-[1.02] transition-transform">
                 <div className="absolute inset-0 flex flex-col items-center justify-end pb-4">
-                  <div className="flex items-center justify-center w-10 h-10 bg-white dark:bg-slate-800 rounded-full mb-2 shadow-lg">
-                    <div className="flex items-center justify-center w-8 h-8 bg-blue-600 rounded-full group-hover:bg-blue-700 transition-colors">
+                  <div className="flex items-center justify-center w-10 h-10 mb-2 bg-white rounded-full shadow-lg dark:bg-slate-800">
+                    <div className="flex items-center justify-center w-8 h-8 transition-colors bg-blue-600 rounded-full group-hover:bg-blue-700">
                       <Plus className="w-5 h-5 text-white" />
                     </div>
                   </div>
@@ -398,7 +377,7 @@ export default function BlogPage() {
                 >
                   {/* Background Image */}
                   <div
-                    className="absolute inset-0 bg-cover bg-center"
+                    className="absolute inset-0 bg-center bg-cover"
                     style={{ backgroundImage: `url(${story.image})` }}
                   >
                     {/* Dark Overlay at bottom for text readability */}
@@ -408,7 +387,7 @@ export default function BlogPage() {
                   {/* Avatar with blue ring at top-left */}
                   <div className="absolute top-3 left-3">
                     <div className="p-0.5 bg-blue-500 rounded-full">
-                      <Avatar className="w-9 h-9 border-2 border-white">
+                      <Avatar className="border-2 border-white w-9 h-9">
                         <AvatarImage src={story.avatar} />
                         <AvatarFallback>{story.name[0]}</AvatarFallback>
                       </Avatar>
@@ -440,7 +419,7 @@ export default function BlogPage() {
           ) : allPosts.length > 0 ? (
             <>
               {allPosts.map((post) => (
-                <PostCard
+                <ProfilePostCard
                   key={post.id}
                   post={post}
                   isExpanded={expandedPostId === post.id}
@@ -487,7 +466,130 @@ export default function BlogPage() {
   );
 }
 
-function PostCard({
+interface ProfilePostCardProps {
+  post: Post;
+  isExpanded: boolean;
+  onToggleExpand: () => void;
+  onLike: () => void;
+  currentUserAvatar?: string | null;
+  currentUserDisplayName?: string;
+  commentInput: string;
+  onCommentInputChange: (val: string) => void;
+  onAddComment: () => void;
+  isAddingComment: boolean;
+}
+
+function PostMediaGrid({
+  media,
+  onMediaClick,
+}: {
+  media: PostMedia[];
+  onMediaClick?: (index: number) => void;
+}) {
+  if (!media || media.length === 0) return null;
+  const count = media.length;
+
+  const mediaEl = (item: PostMedia, index: number, cls = "") => {
+    if (item.type === "video") {
+      return (
+        <video
+          key={item.url}
+          src={item.url}
+          controls
+          onClick={() => onMediaClick?.(index)}
+          className={`w-full h-full object-cover ${cls}`}
+        />
+      );
+    }
+    return (
+      <img
+        key={item.url}
+        src={item.url}
+        alt=""
+        onClick={() => onMediaClick?.(index)}
+        className={`w-full h-full object-cover ${cls}`}
+      />
+    );
+  };
+
+  if (count === 1) {
+    return (
+      <div className="h-[500px] overflow-hidden cursor-zoom-in">
+        {mediaEl(media[0], 0)}
+      </div>
+    );
+  }
+
+  if (count === 2) {
+    return (
+      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden">
+        {media.map((m, idx) => (
+          <div key={m.url} className="overflow-hidden cursor-zoom-in">
+            {mediaEl(m, idx)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  if (count === 3) {
+    return (
+      <div className="h-[500px] grid grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden">
+        <div className="col-span-2 overflow-hidden cursor-zoom-in">
+          {mediaEl(media[0], 0)}
+        </div>
+        <div className="overflow-hidden cursor-zoom-in">
+          {mediaEl(media[1], 1)}
+        </div>
+        <div className="overflow-hidden cursor-zoom-in">
+          {mediaEl(media[2], 2)}
+        </div>
+      </div>
+    );
+  }
+
+  if (count === 4) {
+    return (
+      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden">
+        {media.map((m, idx) => (
+          <div key={m.url} className="overflow-hidden cursor-zoom-in">
+            {mediaEl(m, idx)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  const remaining = count > 5 ? count - 5 : 0;
+  return (
+    <div className="h-[500px] flex flex-col gap-0.5 overflow-hidden">
+      <div className="grid grid-cols-2 gap-0.5 flex-[3] min-h-0">
+        {media.slice(0, 2).map((m, idx) => (
+          <div key={m.url} className="overflow-hidden cursor-zoom-in">
+            {mediaEl(m, idx)}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-0.5 flex-[2] min-h-0">
+        {media.slice(2, 5).map((m, i) => (
+          <div key={m.url} className="relative overflow-hidden cursor-zoom-in">
+            {mediaEl(m, i + 2)}
+            {i === 2 && remaining > 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <span className="text-2xl font-bold text-white">
+                  +{remaining}
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function ProfilePostCard({
   post,
   isExpanded,
   onToggleExpand,
@@ -498,828 +600,167 @@ function PostCard({
   onCommentInputChange,
   onAddComment,
   isAddingComment,
-}: {
-  post: Post;
-  isExpanded: boolean;
-  onToggleExpand: () => void;
-  onLike: () => void;
-  currentUserAvatar?: string | null;
-  currentUserDisplayName?: string;
-  commentInput: string;
-  onCommentInputChange: (value: string) => void;
-  onAddComment: () => void;
-  isAddingComment: boolean;
-}) {
+}: ProfilePostCardProps) {
+  const { data: commentsData } = useComments(isExpanded ? post.id : "");
+  const comments = commentsData || [];
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const { data: comments = [], isLoading: isLoadingComments } = useComments(
-    isExpanded ? post.id : "",
-  );
+  const likesCount = post.likesCount ?? 0;
+  const commentsCount = post.commentsCount ?? 0;
+  const hasStats = likesCount > 0 || commentsCount > 0;
 
   return (
-    <div className="overflow-hidden bg-white border shadow-sm rounded-2xl border-slate-100">
-      {/* Post Header */}
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3">
+    <div className="w-full min-w-0 overflow-hidden bg-white border-0 rounded-none shadow-sm md:rounded-2xl md:border border-slate-100">
+      <div className="flex items-center justify-between px-4 pt-4 pb-2">
+        <div className="flex items-center flex-1 min-w-0 gap-3">
           <PresignedAvatar
             avatarKey={post.author?.avatar}
             displayName={post.author?.displayName}
-            className="w-10 h-10 shrink-0"
-            fallbackClassName="font-bold bg-slate-100 text-slate-600"
+            className="w-10 h-10"
           />
-          <div>
-            <p className="text-sm font-bold leading-none text-slate-900">
-              {post.author?.displayName || `User ${post.authorId.slice(0, 8)}`}
+          <div className="min-w-0">
+            <p className="text-sm font-semibold leading-tight truncate text-slate-900">
+              {post.author?.displayName || "User"}
             </p>
-            <p
-              className="text-[11px] text-slate-400 mt-1.5"
-              suppressHydrationWarning
-            >
-              {formatPostTime(post.createdAt)}
+            <p className="text-[11px] text-slate-400">
+              {new Date(post.createdAt).toLocaleDateString("vi-VN", {
+                day: "2-digit",
+                month: "2-digit",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
             </p>
           </div>
         </div>
-        <Button variant="ghost" size="icon" className="w-8 h-8 text-slate-400">
-          <MoreHorizontal className="w-5 h-5" />
-        </Button>
+        <button className="p-2 transition-colors rounded-full hover:bg-slate-100">
+          <MoreHorizontal className="w-5 h-5 text-slate-500" />
+        </button>
       </div>
 
-      {/* Post Content */}
-      <div className="px-4 pb-3">
-        <p className="text-sm leading-relaxed whitespace-pre-wrap md:text-base text-slate-800">
+      {post.content && (
+        <p className="px-4 pb-3 text-sm leading-relaxed break-words whitespace-pre-wrap text-slate-800">
           {post.content}
         </p>
-      </div>
-
-      {/* Post Media */}
-      {post.media && post.media.length > 0 && (
-        <PostMediaGrid
-          media={post.media}
-          onMediaClick={(idx) => setLightboxIndex(idx)}
-        />
       )}
 
-      {/* Lightbox */}
-      {lightboxIndex !== null && post.media && (
-        <ImageLightbox
-          post={post}
+      {post.media && post.media.length > 0 && (
+        <div className="mx-0">
+          <PostMediaGrid media={post.media} onMediaClick={setLightboxIndex} />
+        </div>
+      )}
+
+      {post.media && lightboxIndex !== null && (
+        <PostMediaLightbox
+          open={lightboxIndex !== null}
           media={post.media}
           initialIndex={lightboxIndex}
+          author={{
+            displayName: post.author?.displayName,
+            avatar: post.author?.avatar,
+          }}
+          content={post.content}
+          createdAt={post.createdAt}
+          likesCount={post.likesCount}
+          commentsCount={post.commentsCount}
           onClose={() => setLightboxIndex(null)}
-          currentUserAvatar={currentUserAvatar}
-          currentUserDisplayName={currentUserDisplayName}
-          commentInput={commentInput}
-          onCommentInputChange={onCommentInputChange}
-          onAddComment={onAddComment}
-          isAddingComment={isAddingComment}
-          onLike={onLike}
         />
       )}
 
-      {/* Post Actions */}
-      <div className="flex items-center justify-around p-1 border-t md:p-2 border-slate-50">
-        <Button
-          variant="ghost"
+      {hasStats && (
+        <div className="flex items-center justify-between min-w-0 px-4 pt-3 pb-1">
+          {likesCount > 0 ? (
+            <span className="text-sm text-slate-500 flex items-center gap-1.5">
+              <Heart className="w-4 h-4 text-red-400 fill-red-400" />
+              {likesCount}
+            </span>
+          ) : (
+            <span />
+          )}
+          {commentsCount > 0 ? (
+            <span
+              className="text-sm cursor-pointer text-slate-500 hover:underline"
+              onClick={onToggleExpand}
+            >
+              {commentsCount} bình luận
+            </span>
+          ) : null}
+        </div>
+      )}
+
+      <div className="flex mx-0 mt-1 border-t border-slate-100">
+        <button
           onClick={onLike}
-          disabled={post.isLikedByCurrentUser}
-          className={`flex-1 gap-2 text-xs md:text-sm h-10 ${
-            post.isLikedByCurrentUser
-              ? "text-red-500 cursor-not-allowed"
-              : "text-slate-600 hover:text-red-500"
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-none hover:bg-slate-50 transition-colors ${
+            post.isLikedByCurrentUser ? "text-red-500" : "text-slate-500"
           }`}
         >
-          {post.isLikedByCurrentUser ? (
-            <Heart className="w-4 h-4 fill-current md:w-5 md:h-5" />
-          ) : (
-            <Heart className="w-4 h-4 md:w-5 md:h-5" />
-          )}
-          Thích {post.likesCount > 0 && `(${post.likesCount})`}
-        </Button>
-        <Button
-          variant="ghost"
+          <Heart
+            className={`w-4 h-4 ${post.isLikedByCurrentUser ? "fill-red-500" : ""}`}
+          />
+          Thích
+        </button>
+        <button
           onClick={onToggleExpand}
-          className="flex-1 h-10 gap-2 text-xs text-slate-600 hover:text-blue-600 md:text-sm"
+          className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-colors rounded-none"
         >
-          <MessageCircle className="w-4 h-4 md:w-5 md:h-5" />
-          Bình luận {post.commentsCount > 0 && `(${post.commentsCount})`}
-        </Button>
-        <Button
-          variant="ghost"
-          className="flex-1 h-10 gap-2 text-xs text-slate-600 md:text-sm"
-        >
-          <Share2 className="w-4 h-4 md:w-5 md:h-5" />
+          <MessageCircle className="w-4 h-4" />
+          Bình luận
+        </button>
+        <button className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-colors rounded-none">
+          <Share2 className="w-4 h-4" />
           Chia sẻ
-        </Button>
+        </button>
       </div>
 
-      {/* Comments Section */}
       {isExpanded && (
-        <div className="p-4 space-y-4 border-t border-slate-50">
-          {/* Comment Input */}
-          <div className="flex gap-3">
+        <div className="min-w-0 px-4 pt-2 pb-4 space-y-3 border-t border-slate-100">
+          {comments.map((c) => (
+            <div key={c.id} className="flex items-start gap-2">
+              <PresignedAvatar
+                avatarKey={c.user?.avatar}
+                displayName={c.user?.displayName}
+                className="flex-shrink-0 w-8 h-8"
+              />
+              <div className="flex-1 min-w-0 px-3 py-2 rounded-2xl bg-slate-100">
+                <p className="text-xs font-semibold text-slate-900">
+                  {c.user?.displayName}
+                </p>
+                <p className="text-sm break-words text-slate-700">
+                  {c.content}
+                </p>
+              </div>
+            </div>
+          ))}
+
+          <div className="flex items-center min-w-0 gap-2 pt-1">
             <PresignedAvatar
               avatarKey={currentUserAvatar}
               displayName={currentUserDisplayName}
-              className="w-8 h-8 shrink-0"
+              className="flex-shrink-0 w-8 h-8"
             />
-            <div className="flex flex-1 gap-2">
+            <div className="flex min-w-0 items-center flex-1 gap-2 px-4 py-1.5 rounded-full bg-slate-100">
               <Input
-                placeholder="Viết bình luận..."
                 value={commentInput}
                 onChange={(e) => onCommentInputChange(e.target.value)}
-                disabled={isAddingComment}
-                className="text-sm h-9"
+                onKeyDown={(e) => e.key === "Enter" && onAddComment()}
+                placeholder="Viết bình luận..."
+                className="w-full min-w-0 p-0 text-sm bg-transparent border-0 focus-visible:ring-0 placeholder:text-slate-400"
               />
-              <Button
-                size="sm"
+              <button
                 onClick={onAddComment}
-                disabled={!commentInput.trim() || isAddingComment}
-                className="px-3"
+                disabled={isAddingComment || !commentInput.trim()}
+                className="flex-shrink-0 text-blue-600 hover:text-blue-700 disabled:opacity-40"
               >
                 {isAddingComment ? (
                   <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
                   <Send className="w-4 h-4" />
                 )}
-              </Button>
+              </button>
             </div>
-          </div>
-
-          {/* Comments List */}
-          <div className="space-y-3 overflow-y-auto max-h-96">
-            {isLoadingComments ? (
-              <div className="py-2 text-sm text-center text-slate-500">
-                Đang tải bình luận...
-              </div>
-            ) : comments.length === 0 ? (
-              <div className="py-2 text-sm text-center text-slate-500">
-                Chưa có bình luận nào
-              </div>
-            ) : (
-              comments.map((comment) => (
-                <div key={comment.id} className="flex gap-3">
-                  <PresignedAvatar
-                    avatarKey={comment.user?.avatar}
-                    displayName={comment.user?.displayName}
-                    className="w-8 h-8 shrink-0"
-                  />
-                  <div className="flex-1 bg-slate-50 rounded-lg p-2.5">
-                    <p className="text-xs font-semibold text-slate-900">
-                      {comment.user?.displayName || "Unknown"}
-                    </p>
-                    <p className="mt-1 text-sm leading-relaxed text-slate-800">
-                      {comment.content}
-                    </p>
-                    <p
-                      className="text-[11px] text-slate-400 mt-1"
-                      suppressHydrationWarning
-                    >
-                      {formatPostTime(comment.createdAt)}
-                    </p>
-                  </div>
-                </div>
-              ))
-            )}
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-// ─── Video card in feed ──────────────────────────────────────────────────────
-function VideoMediaItem({
-  src,
-  onClick,
-}: {
-  src: string;
-  onClick?: () => void;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [muted, setMuted] = useState(true);
-  const [hovering, setHovering] = useState(false);
-  const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Pause when scrolled out of view ──────────────────────────────────────
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry.isIntersecting) {
-          videoRef.current?.pause();
-          // clear pending autoplay timer too
-          if (hoverTimerRef.current) {
-            clearTimeout(hoverTimerRef.current);
-            hoverTimerRef.current = null;
-          }
-        }
-      },
-      { threshold: 0.2 },
-    );
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
-
-  // ── Hover-delay autoplay (1.5 s) ─────────────────────────────────────────
-  const handleMouseEnter = () => {
-    setHovering(true);
-    if (!playing) {
-      hoverTimerRef.current = setTimeout(() => {
-        videoRef.current?.play();
-      }, 1500);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    setHovering(false);
-    // Cancel pending autoplay – do NOT pause if already playing
-    if (hoverTimerRef.current) {
-      clearTimeout(hoverTimerRef.current);
-      hoverTimerRef.current = null;
-    }
-  };
-
-  // ── Play / Pause toggle ───────────────────────────────────────────────────
-  const togglePlay = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const v = videoRef.current;
-    if (!v) return;
-    if (v.paused) {
-      v.play();
-    } else {
-      v.pause();
-    }
-  };
-
-  // ── Seek ±10 s ────────────────────────────────────────────────────────────
-  const seek = (e: React.MouseEvent, delta: number) => {
-    e.stopPropagation();
-    const v = videoRef.current;
-    if (!v) return;
-    v.currentTime = Math.max(
-      0,
-      Math.min(v.duration || 0, v.currentTime + delta),
-    );
-  };
-
-  // ── Mute toggle ───────────────────────────────────────────────────────────
-  const toggleMute = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const v = videoRef.current;
-    if (!v) return;
-    v.muted = !v.muted;
-    setMuted(v.muted);
-  };
-
-  const controlsVisible = !playing || hovering;
-
-  return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-full overflow-hidden bg-black cursor-pointer"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      onClick={onClick}
-    >
-      <video
-        ref={videoRef}
-        src={src}
-        className="object-contain w-full h-full"
-        muted={muted}
-        playsInline
-        loop
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onClick={(e) => e.stopPropagation()}
-      />
-
-      {/* ── Centre play/pause overlay (when paused or hovering) ── */}
-      <div
-        className={`absolute inset-0 flex items-center justify-center transition-opacity duration-200 pointer-events-none ${
-          controlsVisible ? "opacity-100" : "opacity-0"
-        }`}
-      >
-        <button
-          className="w-14 h-14 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center transition-colors backdrop-blur-sm pointer-events-auto"
-          onClick={togglePlay}
-          aria-label={playing ? "Dừng video" : "Phát video"}
-        >
-          {playing ? (
-            <svg className="w-6 h-6 text-white fill-white" viewBox="0 0 24 24">
-              <rect x="6" y="4" width="4" height="16" rx="1" />
-              <rect x="14" y="4" width="4" height="16" rx="1" />
-            </svg>
-          ) : (
-            <Play className="w-7 h-7 text-white fill-white translate-x-0.5" />
-          )}
-        </button>
-      </div>
-
-      {/* ── Bottom control bar (visible when paused or hovering) ── */}
-      <div
-        className={`absolute bottom-0 left-0 right-0 flex items-center justify-between px-3 py-2 bg-gradient-to-t from-black/70 to-transparent transition-opacity duration-200 ${
-          controlsVisible ? "opacity-100" : "opacity-0"
-        }`}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Rewind 10s */}
-        <button
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-white/20 transition-colors text-white"
-          onClick={(e) => seek(e, -10)}
-          aria-label="Tua lùi 10 giây"
-        >
-          <svg viewBox="0 0 24 24" className="w-7 h-7 fill-white">
-            <path d="M11.99 5V1l-5 5 5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6h-2c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z" />
-            <text
-              x="6.5"
-              y="15.5"
-              fontSize="7"
-              fontWeight="bold"
-              fill="white"
-              fontFamily="sans-serif"
-            >
-              10
-            </text>
-          </svg>
-        </button>
-
-        {/* Forward 10s */}
-        <button
-          className="flex items-center justify-center w-10 h-10 rounded-full hover:bg-white/20 transition-colors text-white"
-          onClick={(e) => seek(e, 10)}
-          aria-label="Tua tới 10 giây"
-        >
-          <svg viewBox="0 0 24 24" className="w-7 h-7 fill-white">
-            <path d="M18 13c0 3.31-2.69 6-6 6s-6-2.69-6-6 2.69-6 6-6v4l5-5-5-5v4c-4.42 0-8 3.58-8 8s3.58 8 8 8 8-3.58 8-8h-2z" />
-            <text
-              x="6.5"
-              y="15.5"
-              fontSize="7"
-              fontWeight="bold"
-              fill="white"
-              fontFamily="sans-serif"
-            >
-              10
-            </text>
-          </svg>
-        </button>
-
-        {/* Mute / Unmute */}
-        <button
-          className="flex items-center justify-center w-8 h-8 rounded-full hover:bg-white/20 transition-colors text-white ml-auto"
-          onClick={toggleMute}
-          aria-label={muted ? "Bật âm thanh" : "Tắt âm thanh"}
-        >
-          {muted ? (
-            // muted icon
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
-              <path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.2.05-.41.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" />
-            </svg>
-          ) : (
-            // unmuted icon
-            <svg viewBox="0 0 24 24" className="w-5 h-5 fill-white">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" />
-            </svg>
-          )}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function PostMediaGrid({
-  media,
-  onMediaClick,
-}: {
-  media: PostMedia[];
-  onMediaClick?: (index: number) => void;
-}) {
-  const count = media.length;
-  // Max 5 visible, rest hidden behind "+N" overlay
-  const maxVisible = 5;
-  const visible = media.slice(0, maxVisible);
-  const extra = count - maxVisible;
-
-  const MediaItem = ({
-    item,
-    index,
-    extraCount,
-  }: {
-    item: PostMedia;
-    index: number;
-    extraCount?: number;
-  }) => {
-    const isVideo = item.type?.startsWith("video");
-    return (
-      <div className="relative w-full h-full overflow-hidden bg-slate-100 cursor-pointer">
-        {isVideo ? (
-          <VideoMediaItem
-            src={item.url}
-            onClick={() => onMediaClick?.(index)}
-          />
-        ) : (
-          <img
-            src={item.url}
-            className="object-cover w-full h-full hover:brightness-90 transition-all duration-200"
-            alt="media"
-            onClick={() => onMediaClick?.(index)}
-          />
-        )}
-        {extraCount != null && extraCount > 0 && (
-          <div
-            className="absolute inset-0 bg-black/55 flex items-center justify-center cursor-pointer"
-            onClick={() => onMediaClick?.(index)}
-          >
-            <span className="text-white text-3xl font-bold">+{extraCount}</span>
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Fixed height wrapper: 500px always
-  const H = "h-[500px]";
-
-  // 1 photo — full
-  if (count === 1) {
-    return (
-      <div className={`w-full ${H}`}>
-        <MediaItem item={visible[0]} index={0} />
-      </div>
-    );
-  }
-
-  // 2 photos — two equal columns
-  if (count === 2) {
-    return (
-      <div className={`w-full ${H} flex gap-0.5`}>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[0]} index={0} />
-        </div>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[1]} index={1} />
-        </div>
-      </div>
-    );
-  }
-
-  // 3 photos — 1 large left (full height) + 2 stacked right
-  if (count === 3) {
-    return (
-      <div className={`w-full ${H} flex gap-0.5`}>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[0]} index={0} />
-        </div>
-        <div className="flex-1 h-full flex flex-col gap-0.5">
-          <div className="flex-1">
-            <MediaItem item={visible[1]} index={1} />
-          </div>
-          <div className="flex-1">
-            <MediaItem item={visible[2]} index={2} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 4 photos — 1 large left (full height) + 3 stacked right
-  if (count === 4) {
-    return (
-      <div className={`w-full ${H} flex gap-0.5`}>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[0]} index={0} />
-        </div>
-        <div className="flex-1 h-full flex flex-col gap-0.5">
-          <div className="flex-1">
-            <MediaItem item={visible[1]} index={1} />
-          </div>
-          <div className="flex-1">
-            <MediaItem item={visible[2]} index={2} />
-          </div>
-          <div className="flex-1">
-            <MediaItem item={visible[3]} index={3} />
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // 5+ photos — top row 2 cols, bottom row 3 cols; last cell has +N overlay
-  return (
-    <div className={`w-full ${H} flex flex-col gap-0.5`}>
-      {/* Top row — 2 photos, 60% height */}
-      <div className="flex gap-0.5" style={{ flex: "3" }}>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[0]} index={0} />
-        </div>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[1]} index={1} />
-        </div>
-      </div>
-      {/* Bottom row — 3 photos, 40% height */}
-      <div className="flex gap-0.5" style={{ flex: "2" }}>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[2]} index={2} />
-        </div>
-        <div className="flex-1 h-full">
-          <MediaItem item={visible[3]} index={3} />
-        </div>
-        <div className="flex-1 h-full">
-          <MediaItem
-            item={visible[4]}
-            index={4}
-            extraCount={extra > 0 ? extra : undefined}
-          />
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ImageLightbox({
-  post,
-  media,
-  initialIndex,
-  onClose,
-  currentUserAvatar,
-  currentUserDisplayName,
-  commentInput,
-  onCommentInputChange,
-  onAddComment,
-  isAddingComment,
-  onLike,
-}: {
-  post: Post;
-  media: PostMedia[];
-  initialIndex: number;
-  onClose: () => void;
-  currentUserAvatar?: string | null;
-  currentUserDisplayName?: string;
-  commentInput: string;
-  onCommentInputChange: (value: string) => void;
-  onAddComment: () => void;
-  isAddingComment: boolean;
-  onLike: () => void;
-}) {
-  const [currentIndex, setCurrentIndex] = useState(initialIndex);
-  const { data: comments = [], isLoading: isLoadingComments } = useComments(
-    post.id,
-  );
-  const { mutate: addComment } = useAddComment();
-
-  const current = media[currentIndex];
-  const isVideo = current?.type?.startsWith("video");
-
-  const goPrev = () => setCurrentIndex((i) => Math.max(0, i - 1));
-  const goNext = () =>
-    setCurrentIndex((i) => Math.min(media.length - 1, i + 1));
-
-  // Close on backdrop click
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.target === e.currentTarget) onClose();
-  };
-
-  // Keyboard navigation
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowLeft") goPrev();
-      if (e.key === "ArrowRight") goNext();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex bg-black/90"
-      onClick={handleBackdropClick}
-    >
-      {/* Close button */}
-      <button
-        onClick={onClose}
-        className="absolute top-3 right-3 z-10 w-9 h-9 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-      >
-        <X className="w-5 h-5" />
-      </button>
-
-      {/* Left panel — image/video */}
-      <div className="flex-1 relative flex items-center justify-center min-w-0">
-        {isVideo ? (
-          <video
-            key={currentIndex}
-            src={current.url}
-            className="max-h-full max-w-full object-contain"
-            controls
-            autoPlay
-          />
-        ) : (
-          <img
-            key={currentIndex}
-            src={current.url}
-            alt="media"
-            className="max-h-full max-w-full object-contain select-none"
-          />
-        )}
-
-        {/* Prev arrow */}
-        {currentIndex > 0 && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              goPrev();
-            }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-          >
-            <ChevronLeft className="w-6 h-6" />
-          </button>
-        )}
-
-        {/* Next arrow */}
-        {currentIndex < media.length - 1 && (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              goNext();
-            }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 w-10 h-10 flex items-center justify-center rounded-full bg-black/60 hover:bg-black/80 text-white transition-colors"
-          >
-            <ChevronRight className="w-6 h-6" />
-          </button>
-        )}
-
-        {/* Index indicator */}
-        {media.length > 1 && (
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
-            {media.map((_, i) => (
-              <button
-                key={i}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setCurrentIndex(i);
-                }}
-                className={`w-2 h-2 rounded-full transition-colors ${
-                  i === currentIndex ? "bg-white" : "bg-white/40"
-                }`}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* Right panel — post info + comments */}
-      <div
-        className="w-[360px] shrink-0 bg-white dark:bg-slate-900 flex flex-col h-full"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Post header */}
-        <div className="flex items-center gap-3 p-4 border-b border-slate-100 dark:border-slate-800">
-          <PresignedAvatar
-            avatarKey={post.author?.avatar}
-            displayName={post.author?.displayName}
-            className="w-10 h-10 shrink-0"
-            fallbackClassName="font-bold bg-slate-100 text-slate-600"
-          />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-bold text-slate-900 dark:text-white truncate">
-              {post.author?.displayName || `User ${post.authorId.slice(0, 8)}`}
-            </p>
-            <p
-              className="text-[11px] text-slate-400 mt-0.5"
-              suppressHydrationWarning
-            >
-              {formatPostTime(post.createdAt)}
-            </p>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="w-8 h-8 text-slate-400 shrink-0"
-          >
-            <MoreHorizontal className="w-5 h-5" />
-          </Button>
-        </div>
-
-        {/* Post content */}
-        {post.content && (
-          <div className="px-4 py-3 border-b border-slate-100 dark:border-slate-800">
-            <p className="text-sm leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
-              {post.content}
-            </p>
-          </div>
-        )}
-
-        {/* Likes count */}
-        {post.likesCount > 0 && (
-          <div className="px-4 py-2 flex items-center gap-1.5 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center justify-center w-5 h-5 bg-red-500 rounded-full">
-              <Heart className="w-3 h-3 text-white fill-white" />
-            </div>
-            <span className="text-sm text-slate-500">{post.likesCount}</span>
-          </div>
-        )}
-
-        {/* Actions */}
-        <div className="flex items-center border-b border-slate-100 dark:border-slate-800">
-          <button
-            onClick={onLike}
-            disabled={post.isLikedByCurrentUser}
-            className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium transition-colors ${
-              post.isLikedByCurrentUser
-                ? "text-red-500 cursor-not-allowed"
-                : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-red-500"
-            }`}
-          >
-            <Heart
-              className={`w-4 h-4 ${post.isLikedByCurrentUser ? "fill-current" : ""}`}
-            />
-            Thích
-          </button>
-          <button className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-            <MessageCircle className="w-4 h-4" />
-            Bình luận
-          </button>
-          <button className="flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
-            <Share2 className="w-4 h-4" />
-            Chia sẻ
-          </button>
-        </div>
-
-        {/* Comments list */}
-        <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3">
-          {isLoadingComments ? (
-            <div className="py-4 text-sm text-center text-slate-400">
-              Đang tải bình luận...
-            </div>
-          ) : comments.length === 0 ? (
-            <div className="py-4 text-sm text-center text-slate-400">
-              Chưa có bình luận nào
-            </div>
-          ) : (
-            comments.map((comment) => (
-              <div key={comment.id} className="flex gap-2.5">
-                <PresignedAvatar
-                  avatarKey={comment.user?.avatar}
-                  displayName={comment.user?.displayName}
-                  className="w-8 h-8 shrink-0"
-                />
-                <div className="flex-1 bg-slate-50 dark:bg-slate-800 rounded-lg px-3 py-2">
-                  <p className="text-xs font-semibold text-slate-900 dark:text-white">
-                    {comment.user?.displayName || "Unknown"}
-                  </p>
-                  <p className="mt-0.5 text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
-                    {comment.content}
-                  </p>
-                  <p
-                    className="text-[11px] text-slate-400 mt-1"
-                    suppressHydrationWarning
-                  >
-                    {formatPostTime(comment.createdAt)}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-
-        {/* Comment input */}
-        <div className="p-3 border-t border-slate-100 dark:border-slate-800 flex gap-2 items-center">
-          <PresignedAvatar
-            avatarKey={currentUserAvatar}
-            displayName={currentUserDisplayName}
-            className="w-8 h-8 shrink-0"
-          />
-          <div className="flex flex-1 gap-2">
-            <Input
-              placeholder="Viết bình luận..."
-              value={commentInput}
-              onChange={(e) => onCommentInputChange(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  onAddComment();
-                }
-              }}
-              disabled={isAddingComment}
-              className="text-sm h-9 rounded-full bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700"
-            />
-            <Button
-              size="sm"
-              onClick={onAddComment}
-              disabled={!commentInput.trim() || isAddingComment}
-              className="px-3 h-9 rounded-full"
-            >
-              {isAddingComment ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Send className="w-4 h-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }

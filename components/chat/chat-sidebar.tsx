@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Search, Edit } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Search, Edit, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
@@ -25,27 +25,68 @@ export function ChatSidebar() {
   const [open, setOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [query, setQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | "private" | "group">(
+    "all",
+  );
   const params = useParams();
   const currentId = params.id as string;
   const user = useAuthStore((state) => state.user);
   const { data: conversationsData, isLoading, error } = useConversations();
-  const conversations = conversationsData?.conversations || [];
+  const conversations = useMemo(
+    () => conversationsData?.conversations || [],
+    [conversationsData],
+  );
   const { data: contactsData } = useContacts();
   const contacts = contactsData?.contacts || [];
   const createMutation = useCreateConversation();
 
   const currentUserId = user?.id || user?._id;
 
+  const normalizedQuery = query.trim().toLowerCase();
+
+  const filteredConversations = useMemo(() => {
+    return conversations.filter((conversation) => {
+      const matchType =
+        typeFilter === "all" || conversation.type === typeFilter;
+
+      if (!matchType) return false;
+      if (!normalizedQuery) return true;
+
+      const searchable = [conversation.name, conversation.lastMessage?.content]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchable.includes(normalizedQuery);
+    });
+  }, [conversations, normalizedQuery, typeFilter]);
+
+  const filterBtnClass = (isActive: boolean) =>
+    `rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+      isActive
+        ? "bg-blue-600 text-white"
+        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+    }`;
+
   return (
-    <aside className="w-[350px] border-r border-slate-200/60 flex flex-col h-full bg-gradient-to-b from-white to-slate-50/30 shrink-0">
-      <div className="flex items-center justify-between px-5 pt-4 pb-3">
-        <h1 className="text-2xl font-bold tracking-tight text-slate-900 bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text">
-          Messages
-        </h1>
+    <aside className="flex flex-col w-full h-full border-r border-slate-200/60 bg-gradient-to-b from-white to-slate-50/20 shrink-0">
+      <div className="flex items-center justify-between px-4 pt-3 pb-2 md:px-5 md:pt-4">
+        <div className="min-w-0">
+          <h2 className="text-xl font-bold leading-tight text-blue-600">
+            Tin nhắn
+          </h2>
+          <p className="text-xs text-slate-500 mt-0.5">
+            {filteredConversations.length}/{conversations.length} cuộc hội thoại
+          </p>
+        </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
-            <button className="p-2.5 hover:bg-slate-100 rounded-xl transition-all duration-200 hover:scale-105">
-              <Edit className="w-5 h-5 text-slate-600" />
+            <button
+              aria-label="Tạo cuộc trò chuyện"
+              className="flex items-center justify-center w-10 h-10 transition-colors rounded-xl bg-slate-100/80 hover:bg-slate-200/80"
+            >
+              <Edit className="w-5 h-5 text-slate-700" />
             </button>
           </DialogTrigger>
           <DialogContent>
@@ -147,28 +188,66 @@ export function ChatSidebar() {
         </Dialog>
       </div>
 
-      <div className="px-5 pb-4">
+      <div className="px-4 pb-2 md:px-5">
         <div className="relative">
-          <Search className="absolute w-4 h-4 -translate-y-1/2 left-4 top-1/2 text-slate-400" />
+          <Search className="absolute w-4 h-4 -translate-y-1/2 left-3.5 top-1/2 text-slate-400" />
           <Input
-            placeholder="Tìm kiếm đoạn chat..."
-            className="bg-white border shadow-sm pl-11 border-slate-200/80 h-11 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/20"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Tìm kiếm cuộc trò chuyện..."
+            className="pl-10 pr-10 bg-white border shadow-sm border-slate-200/80 h-11 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/20"
           />
+          {query ? (
+            <button
+              type="button"
+              aria-label="Xóa từ khóa"
+              onClick={() => setQuery("")}
+              className="absolute p-1 -translate-y-1/2 rounded-full right-2 top-1/2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          ) : null}
+        </div>
+      </div>
+
+      <div className="px-4 pb-2.5 md:px-5 border-b border-slate-100">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+          <button
+            type="button"
+            onClick={() => setTypeFilter("all")}
+            className={filterBtnClass(typeFilter === "all")}
+          >
+            Tất cả
+          </button>
+          <button
+            type="button"
+            onClick={() => setTypeFilter("private")}
+            className={filterBtnClass(typeFilter === "private")}
+          >
+            Cá nhân
+          </button>
+          <button
+            type="button"
+            onClick={() => setTypeFilter("group")}
+            className={filterBtnClass(typeFilter === "group")}
+          >
+            Nhóm
+          </button>
         </div>
       </div>
 
       <ScrollArea className="flex-1">
         {isLoading ? (
-          <div className="px-4 pb-4">
+          <div className="px-3 pt-2 pb-4">
             <ChatListSkeleton />
           </div>
         ) : error ? (
           <div className="px-4 py-8 text-sm text-center text-slate-500">
             Không thể tải danh sách hội thoại
           </div>
-        ) : conversations && conversations.length > 0 ? (
-          <div className="flex flex-col gap-0.5 pb-2">
-            {conversations.map((chat) => (
+        ) : filteredConversations.length > 0 ? (
+          <div className="flex flex-col gap-1.5 pt-2 pb-3">
+            {filteredConversations.map((chat) => (
               <ConversationItemDisplay
                 key={chat.id}
                 conversation={chat}
@@ -179,7 +258,7 @@ export function ChatSidebar() {
           </div>
         ) : (
           <div className="px-4 py-8 text-sm text-center text-slate-500">
-            Chưa có hội thoại nào
+            Không có cuộc hội thoại phù hợp
           </div>
         )}
       </ScrollArea>

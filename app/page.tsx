@@ -18,6 +18,7 @@ import {
 import { useAuthStore } from "@/store/use-auth-store";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
+import { getDefaultRouteForClient } from "@/lib/default-route";
 
 export default function HomePage() {
   const user = useAuthStore((state) => state.user);
@@ -25,7 +26,7 @@ export default function HomePage() {
 
   useEffect(() => {
     if (user) {
-      router.replace("/messages");
+      router.replace(getDefaultRouteForClient());
     }
   }, [user, router]);
 

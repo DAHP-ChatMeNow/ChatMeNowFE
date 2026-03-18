@@ -153,7 +153,7 @@ export default function SettingsPage() {
   return (
     <div className="flex flex-col w-full h-full bg-slate-50 dark:bg-slate-900">
       <ScrollArea className="flex-1 w-full">
-        <div className="max-w-2xl px-4 py-6 mx-auto space-y-6 md:py-10 md:px-6">
+        <div className="w-full max-w-2xl px-0 py-4 mx-auto space-y-5 md:space-y-6 md:py-10 md:px-6">
           {/* Account */}
           <Section label="Tài khoản">
             <div className="flex items-center gap-4 p-4 border-b md:p-5 border-slate-50 dark:border-slate-700">
@@ -266,13 +266,15 @@ export default function SettingsPage() {
           </Section>
 
           {/* Logout */}
-          <button
-            onClick={() => setShowLogoutConfirm(true)}
-            className="flex items-center justify-center w-full gap-3 p-4 font-bold text-red-500 transition-all bg-white border border-red-100 shadow-sm md:p-5 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-2xl dark:border-red-900/50"
-          >
-            <LogOut className="w-5 h-5" />
-            <span>{t.logout}</span>
-          </button>
+          <div className="sticky bottom-0 px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent dark:from-slate-900 dark:via-slate-900 md:bg-transparent md:static md:px-0 md:pt-0 md:pb-0">
+            <button
+              onClick={() => setShowLogoutConfirm(true)}
+              className="flex items-center justify-center w-full gap-3 p-4 font-bold text-red-500 transition-all bg-white border border-red-100 shadow-sm md:p-5 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl md:rounded-2xl dark:border-red-900/50"
+            >
+              <LogOut className="w-5 h-5" />
+              <span>{t.logout}</span>
+            </button>
+          </div>
         </div>
       </ScrollArea>
 
@@ -280,7 +282,7 @@ export default function SettingsPage() {
 
       {/* Language */}
       <Dialog open={showLanguageDialog} onOpenChange={setShowLanguageDialog}>
-        <DialogContent className="max-w-sm bg-white dark:bg-slate-800">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm bg-white dark:bg-slate-800 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="dark:text-white">{t.language}</DialogTitle>
           </DialogHeader>
@@ -308,7 +310,7 @@ export default function SettingsPage() {
 
       {/* Change Password */}
       <Dialog open={showChangePassword} onOpenChange={setShowChangePassword}>
-        <DialogContent className="max-w-sm bg-white dark:bg-slate-800">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm bg-white dark:bg-slate-800 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 dark:text-white">
               <KeyRound className="w-5 h-5 text-purple-500" />
@@ -414,7 +416,7 @@ export default function SettingsPage() {
 
       {/* Phone */}
       <Dialog open={showPhoneDialog} onOpenChange={setShowPhoneDialog}>
-        <DialogContent className="max-w-sm bg-white dark:bg-slate-800">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm bg-white dark:bg-slate-800 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 dark:text-white">
               <Phone className="w-5 h-5 text-green-500" />
@@ -458,7 +460,7 @@ export default function SettingsPage() {
 
       {/* Activity History */}
       <Dialog open={showActivity} onOpenChange={setShowActivity}>
-        <DialogContent className="max-w-lg bg-white dark:bg-slate-800 h-[80vh] flex flex-col p-0 gap-0">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg bg-white dark:bg-slate-800 h-[85vh] md:h-[80vh] flex flex-col p-0 gap-0 rounded-2xl">
           <DialogHeader className="px-5 pt-5 pb-0 shrink-0">
             <DialogTitle className="flex items-center gap-2 dark:text-white">
               <History className="w-5 h-5 text-slate-500" />
@@ -538,7 +540,7 @@ export default function SettingsPage() {
 
       {/* Logout Confirm */}
       <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <DialogContent className="max-w-sm bg-white dark:bg-slate-800">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm bg-white dark:bg-slate-800 rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 dark:text-white">
               <AlertTriangle className="w-5 h-5 text-red-500" />
@@ -580,10 +582,10 @@ function Section({
 }) {
   return (
     <div className="space-y-2">
-      <h3 className="px-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+      <h3 className="px-4 md:px-1 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">
         {label}
       </h3>
-      <div className="overflow-hidden bg-white border divide-y shadow-sm dark:bg-slate-800 rounded-2xl border-slate-100 dark:border-slate-700 divide-slate-50 dark:divide-slate-700">
+      <div className="overflow-hidden bg-white divide-y shadow-sm border-y md:border md:rounded-2xl dark:bg-slate-800 border-slate-100 dark:border-slate-700 divide-slate-50 dark:divide-slate-700">
         {children}
       </div>
     </div>
@@ -610,23 +612,23 @@ function SettingItem({
   return (
     <div
       onClick={onClick}
-      className={`flex items-center justify-between p-4 md:p-5 transition-all group ${
+      className={`flex items-center justify-between p-4 md:p-5 transition-all group active:bg-slate-50/80 dark:active:bg-slate-700/60 ${
         onClick
           ? "hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer"
           : "cursor-default"
       }`}
     >
-      <div className="flex items-center gap-4">
+      <div className="flex items-center flex-1 min-w-0 gap-3 md:gap-4">
         <div
           className={`p-2.5 rounded-xl ${iconBg} ${iconColor} ${onClick ? "group-hover:scale-105" : ""} transition-transform shrink-0`}
         >
           <Icon className="w-5 h-5" />
         </div>
-        <div>
+        <div className="min-w-0">
           <p className="text-sm font-semibold leading-none md:text-base text-slate-900 dark:text-white">
             {label}
           </p>
-          <p className="text-[11px] md:text-xs text-slate-400 mt-1.5 leading-relaxed">
+          <p className="text-[11px] md:text-xs text-slate-400 mt-1.5 leading-relaxed break-words">
             {description}
           </p>
         </div>

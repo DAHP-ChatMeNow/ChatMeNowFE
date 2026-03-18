@@ -7,7 +7,7 @@ import { formatMessageTime } from "@/lib/utils";
 
 const formatLastMessagePreview = (conversation: Conversation): string => {
   const lastMessage = conversation.lastMessage;
-  if (!lastMessage) return "No messages yet";
+  if (!lastMessage) return "Chưa có tin nhắn";
 
   const callStatus = (
     lastMessage.callInfo?.status ||
@@ -21,7 +21,7 @@ const formatLastMessagePreview = (conversation: Conversation): string => {
     if (callStatus === "missed") return "Cuộc gọi nhỡ";
   }
 
-  return lastMessage.content || "No messages yet";
+  return lastMessage.content || "Chưa có tin nhắn";
 };
 
 export function ConversationItemDisplay({

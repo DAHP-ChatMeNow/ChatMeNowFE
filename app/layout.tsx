@@ -1,4 +1,5 @@
 import { Montserrat, Roboto } from "next/font/google";
+import type { Metadata } from "next";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
 import { QueryProvider } from "@/components/providers/query-provider";
@@ -19,6 +20,14 @@ const roboto = Roboto({
   variable: "--font-roboto",
   display: "swap",
 });
+
+export const metadata: Metadata = {
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
+};
 
 export default function RootLayout({
   children,
