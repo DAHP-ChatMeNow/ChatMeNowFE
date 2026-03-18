@@ -45,13 +45,12 @@ import {
   useAddComment,
 } from "@/hooks/use-post";
 import { BlogSkeleton } from "@/components/skeletons/blog-skeleton";
-import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/language-context";
 import { Post, PostMedia } from "@/types/post";
 import { formatPresenceStatus } from "@/lib/utils";
+import { PostMediaLightbox } from "@/components/post/post-media-lightbox";
 
 export default function ProfilePage() {
-  const router = useRouter();
   const user = useAuthStore((state) => state.user);
   const { t, language } = useLanguage();
 
@@ -159,7 +158,7 @@ export default function ProfilePage() {
   return (
     <div className="flex flex-col w-full h-full bg-slate-50/50 dark:bg-slate-900">
       <ScrollArea className="flex-1 w-full">
-        <div className="max-w-3xl px-0 py-0 pb-8 mx-auto space-y-4 md:py-6 md:px-6">
+        <div className="w-full max-w-3xl min-w-0 px-0 py-0 pb-8 mx-auto space-y-4 md:max-w-3xl md:py-6 md:px-6 lg:max-w-4xl">
           {/* === FB-style Profile Header Card === */}
           <div className="overflow-hidden bg-white border-0 rounded-none shadow-sm dark:bg-slate-800 md:rounded-2xl md:border border-slate-100 dark:border-slate-700">
             {/* Cover Photo */}
@@ -469,17 +468,24 @@ export default function ProfilePage() {
 }
 
 // ===================== PostMediaGrid =====================
-function PostMediaGrid({ media }: { media: PostMedia[] }) {
+function PostMediaGrid({
+  media,
+  onMediaClick,
+}: {
+  media: PostMedia[];
+  onMediaClick?: (index: number) => void;
+}) {
   if (!media || media.length === 0) return null;
   const count = media.length;
 
-  const mediaEl = (item: PostMedia, cls = "") => {
+  const mediaEl = (item: PostMedia, index: number, cls = "") => {
     if (item.type === "video") {
       return (
         <video
           key={item.url}
           src={item.url}
           controls
+          onClick={() => onMediaClick?.(index)}
           className={`w-full h-full object-cover ${cls}`}
         />
       );
@@ -489,6 +495,7 @@ function PostMediaGrid({ media }: { media: PostMedia[] }) {
         key={item.url}
         src={item.url}
         alt=""
+        onClick={() => onMediaClick?.(index)}
         className={`w-full h-full object-cover ${cls}`}
       />
     );
@@ -496,17 +503,17 @@ function PostMediaGrid({ media }: { media: PostMedia[] }) {
 
   if (count === 1)
     return (
-      <div className="h-[500px] overflow-hidden rounded-xl">
-        {mediaEl(media[0], "rounded-xl")}
+      <div className="h-[500px] overflow-hidden cursor-zoom-in">
+        {mediaEl(media[0], 0)}
       </div>
     );
 
   if (count === 2)
     return (
-      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl">
-        {media.map((m) => (
-          <div key={m.url} className="overflow-hidden">
-            {mediaEl(m)}
+      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden">
+        {media.map((m, idx) => (
+          <div key={m.url} className="overflow-hidden cursor-zoom-in">
+            {mediaEl(m, idx)}
           </div>
         ))}
       </div>
@@ -514,48 +521,49 @@ function PostMediaGrid({ media }: { media: PostMedia[] }) {
 
   if (count === 3)
     return (
-      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl">
-        <div className="row-span-2 overflow-hidden">{mediaEl(media[0])}</div>
-        <div className="overflow-hidden">{mediaEl(media[1])}</div>
-        <div className="overflow-hidden">{mediaEl(media[2])}</div>
+      <div className="h-[500px] grid grid-cols-2 grid-rows-2 gap-0.5 overflow-hidden">
+        <div className="col-span-2 overflow-hidden cursor-zoom-in">
+          {mediaEl(media[0], 0)}
+        </div>
+        <div className="overflow-hidden cursor-zoom-in">{mediaEl(media[1], 1)}</div>
+        <div className="overflow-hidden cursor-zoom-in">{mediaEl(media[2], 2)}</div>
       </div>
     );
 
   if (count === 4)
     return (
-      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden rounded-xl">
-        {media.map((m) => (
-          <div key={m.url} className="overflow-hidden">
-            {mediaEl(m)}
+      <div className="h-[500px] grid grid-cols-2 gap-0.5 overflow-hidden">
+        {media.map((m, idx) => (
+          <div key={m.url} className="overflow-hidden cursor-zoom-in">
+            {mediaEl(m, idx)}
           </div>
         ))}
       </div>
     );
 
-  // 5+
-  const remaining = count - 5;
+  const remaining = count > 5 ? count - 5 : 0;
   return (
-    <div className="h-[500px] grid grid-cols-3 grid-rows-2 gap-0.5 overflow-hidden rounded-xl">
-      {media.slice(0, 2).map((m) => (
-        <div key={m.url} className="col-span-1 row-span-1 overflow-hidden">
-          {mediaEl(m)}
-        </div>
-      ))}
-      {media.slice(2, 5).map((m, i) => (
-        <div
-          key={m.url}
-          className="relative col-span-1 row-span-1 overflow-hidden"
-        >
-          {mediaEl(m)}
-          {i === 2 && remaining > 0 && (
-            <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-              <span className="text-2xl font-bold text-white">
-                +{remaining}
-              </span>
-            </div>
-          )}
-        </div>
-      ))}
+    <div className="h-[500px] flex flex-col gap-0.5 overflow-hidden">
+      <div className="grid grid-cols-2 gap-0.5 flex-[3] min-h-0">
+        {media.slice(0, 2).map((m, idx) => (
+          <div key={m.url} className="overflow-hidden cursor-zoom-in">
+            {mediaEl(m, idx)}
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-3 gap-0.5 flex-[2] min-h-0">
+        {media.slice(2, 5).map((m, i) => (
+          <div key={m.url} className="relative overflow-hidden cursor-zoom-in">
+            {mediaEl(m, i + 2)}
+            {i === 2 && remaining > 0 && (
+              <div className="absolute inset-0 flex items-center justify-center bg-black/60">
+                <span className="text-2xl font-bold text-white">+{remaining}</span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -588,9 +596,13 @@ function ProfilePostCard({
 }: ProfilePostCardProps) {
   const { data: commentsData } = useComments(isExpanded ? post.id : "");
   const comments = commentsData || [];
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const likesCount = post.likesCount ?? 0;
+  const commentsCount = post.commentsCount ?? 0;
+  const hasStats = likesCount > 0 || commentsCount > 0;
 
   return (
-    <div className="overflow-hidden bg-white border-0 rounded-none shadow-sm dark:bg-slate-800 md:rounded-2xl md:border border-slate-100 dark:border-slate-700">
+    <div className="overflow-hidden bg-white border-0 rounded-none shadow-sm dark:bg-slate-800 md:rounded-none md:border border-slate-100 dark:border-slate-700">
       {/* Header */}
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <div className="flex items-center gap-3">
@@ -629,23 +641,48 @@ function ProfilePostCard({
       {/* Media */}
       {post.media && post.media.length > 0 && (
         <div className="mx-0">
-          <PostMediaGrid media={post.media} />
+          <PostMediaGrid media={post.media} onMediaClick={setLightboxIndex} />
         </div>
       )}
 
+      {post.media && lightboxIndex !== null && (
+        <PostMediaLightbox
+          open={lightboxIndex !== null}
+          media={post.media}
+          initialIndex={lightboxIndex}
+          author={{
+            displayName: post.author?.displayName,
+            avatar: post.author?.avatar,
+          }}
+          content={post.content}
+          createdAt={post.createdAt}
+          likesCount={post.likesCount}
+          commentsCount={post.commentsCount}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
+
       {/* Stats */}
-      <div className="flex items-center justify-between px-4 pt-3 pb-1">
-        <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-          <Heart className="w-4 h-4 text-red-400 fill-red-400" />
-          {post.likesCount ?? 0}
-        </span>
-        <span
-          className="text-sm cursor-pointer text-slate-500 dark:text-slate-400 hover:underline"
-          onClick={onToggleExpand}
-        >
-          {post.commentsCount ?? 0} bình luận
-        </span>
-      </div>
+      {hasStats && (
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          {likesCount > 0 ? (
+            <span className="text-sm text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
+              <Heart className="w-4 h-4 text-red-400 fill-red-400" />
+              {likesCount}
+            </span>
+          ) : (
+            <span />
+          )}
+          {commentsCount > 0 ? (
+            <span
+              className="text-sm cursor-pointer text-slate-500 dark:text-slate-400 hover:underline"
+              onClick={onToggleExpand}
+            >
+              {commentsCount} bình luận
+            </span>
+          ) : null}
+        </div>
+      )}
 
       {/* Action bar */}
       <div className="flex mx-0 mt-1 border-t border-slate-100 dark:border-slate-700">

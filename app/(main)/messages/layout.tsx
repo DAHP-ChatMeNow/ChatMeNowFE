@@ -16,7 +16,7 @@ export default function MessagesLayout({
       <aside
         className={`
         ${isChatting ? "hidden" : "flex"} 
-        md:flex w-full md:w-[350px] lg:w-[400px] shrink-0 border-r border-slate-200/60 flex-col h-full shadow-xl
+        md:flex w-full md:w-[360px] lg:w-[400px] xl:w-[420px] shrink-0 border-r border-slate-200/60 flex-col h-full shadow-xl
       `}
       >
         <ChatSidebar />
