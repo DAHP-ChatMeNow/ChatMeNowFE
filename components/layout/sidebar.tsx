@@ -3,7 +3,6 @@ import {
   MessageSquare,
   UserPlus,
   FileText,
-  Clapperboard,
   Home,
   CircleUser,
   Settings,
@@ -26,7 +25,6 @@ export function Sidebar({ mode = "desktop" }: { mode?: "desktop" | "mobile" }) {
       badgeCount: 8,
     },
     { icon: FileText, path: "/blog", label: "Bài viết" },
-    { icon: Clapperboard, path: "/reels", label: "Reels" },
     { icon: UserPlus, path: "/contacts", label: "Bạn bè" },
     {
       icon: Bell,
@@ -34,12 +32,7 @@ export function Sidebar({ mode = "desktop" }: { mode?: "desktop" | "mobile" }) {
       label: "Thông báo",
       badgeCount: 5,
     },
-    {
-      icon: CircleUser,
-      path: "/profile",
-      label: "Cá nhân",
-      hideOnMobile: true,
-    },
+    { icon: CircleUser, path: "/profile", label: "Cá nhân" },
     {
       icon: Settings,
       path: "/settings",
@@ -56,8 +49,8 @@ export function Sidebar({ mode = "desktop" }: { mode?: "desktop" | "mobile" }) {
     ? (() => {
         const mobileOrder = [
           "/blog",
-          "/reels",
           "/messages",
+          "/profile",
           "/contacts",
           "/notifications",
         ];

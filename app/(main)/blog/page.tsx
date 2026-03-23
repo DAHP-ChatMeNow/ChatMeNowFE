@@ -31,7 +31,6 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { Post, PostMedia } from "@/types/post";
 import { toast } from "sonner";
 import { PostMediaLightbox } from "@/components/post/post-media-lightbox";
-import { useRouter } from "next/navigation";
 
 type MediaPreview = {
   url: string;
@@ -61,7 +60,6 @@ const getVideoDuration = (file: File): Promise<number> =>
   });
 
 export default function BlogPage() {
-  const router = useRouter();
   const [postContent, setPostContent] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<MediaPreview[]>([]);
@@ -222,19 +220,12 @@ export default function BlogPage() {
           {/* Create Post */}
           <div className="p-4 space-y-4 bg-white border-0 rounded-none shadow-sm md:p-6 md:rounded-2xl md:border border-slate-100">
             <div className="flex min-w-0 gap-3 md:gap-4">
-              <button
-                type="button"
-                onClick={() => router.push("/profile")}
-                aria-label="Mở trang cá nhân"
-                className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
-              >
-                <PresignedAvatar
-                  avatarKey={user?.avatar}
-                  displayName={user?.displayName}
-                  className="w-10 h-10 md:h-12 md:w-12 shrink-0"
-                  fallbackClassName="text-sm md:text-base"
-                />
-              </button>
+              <PresignedAvatar
+                avatarKey={user?.avatar}
+                displayName={user?.displayName}
+                className="w-10 h-10 md:h-12 md:w-12 shrink-0"
+                fallbackClassName="text-sm md:text-base"
+              />
               <Textarea
                 placeholder="Bạn đang nghĩ gì thế?"
                 value={postContent}
