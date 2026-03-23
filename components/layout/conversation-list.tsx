@@ -19,7 +19,7 @@ const CONVERSATIONS = [
   },
   {
     id: "2",
-    name: "Team Alpha",
+    name: "Teamm Alpha",
     avatar: "",
     lastMsg: "Meeting at 5? Don't forget...",
     time: "10:42 AM",
