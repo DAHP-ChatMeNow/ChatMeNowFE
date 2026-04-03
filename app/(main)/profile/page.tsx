@@ -130,7 +130,7 @@ export default function ProfilePage() {
   };
 
   const handleLike = (postId: string, isLiked: boolean) => {
-    if (!isLiked) likePost({ postId });
+    likePost({ postId, isLiked });
   };
 
   const handleAddComment = (postId: string) => {
@@ -525,8 +525,12 @@ function PostMediaGrid({
         <div className="col-span-2 overflow-hidden cursor-zoom-in">
           {mediaEl(media[0], 0)}
         </div>
-        <div className="overflow-hidden cursor-zoom-in">{mediaEl(media[1], 1)}</div>
-        <div className="overflow-hidden cursor-zoom-in">{mediaEl(media[2], 2)}</div>
+        <div className="overflow-hidden cursor-zoom-in">
+          {mediaEl(media[1], 1)}
+        </div>
+        <div className="overflow-hidden cursor-zoom-in">
+          {mediaEl(media[2], 2)}
+        </div>
       </div>
     );
 
@@ -558,7 +562,9 @@ function PostMediaGrid({
             {mediaEl(m, i + 2)}
             {i === 2 && remaining > 0 && (
               <div className="absolute inset-0 flex items-center justify-center bg-black/60">
-                <span className="text-2xl font-bold text-white">+{remaining}</span>
+                <span className="text-2xl font-bold text-white">
+                  +{remaining}
+                </span>
               </div>
             )}
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Bell,
   UserPlus,
@@ -9,7 +10,7 @@ import {
   Loader,
   ChevronRight,
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -22,6 +23,7 @@ import {
   useNotifications,
   useMarkAllNotificationsAsRead,
 } from "@/hooks/use-notification";
+import { Notification } from "@/types/notification";
 import {
   useAcceptFriendRequest as useAcceptFriendRequestContact,
   useRejectFriendRequest as useRejectFriendRequestContact,
@@ -33,6 +35,7 @@ const getNotificationIcon = (type: string) => {
     case "friend_request":
       return <UserPlus className="w-3 h-3 text-white" />;
     case "like":
+    case "post_like":
       return <Heart className="w-3 h-3 text-white" />;
     case "message":
       return <MessageSquare className="w-3 h-3 text-white" />;
@@ -46,6 +49,7 @@ const getNotificationBgColor = (type: string) => {
     case "friend_request":
       return "bg-orange-500";
     case "like":
+    case "post_like":
       return "bg-red-500";
     case "message":
       return "bg-blue-500";
@@ -55,6 +59,36 @@ const getNotificationBgColor = (type: string) => {
 };
 
 export function NotificationDropdown() {
+  const getSenderName = (noti: Notification) => {
+    if (noti.senderName?.trim()) return noti.senderName.trim();
+    if (typeof noti.senderId === "object" && noti.senderId?.displayName) {
+      return noti.senderId.displayName;
+    }
+    return "Người dùng";
+  };
+
+  const getSenderAvatar = (noti: Notification) => {
+    if (noti.senderAvatar?.trim()) return noti.senderAvatar.trim();
+    if (typeof noti.senderId === "object" && noti.senderId?.avatar) {
+      return noti.senderId.avatar;
+    }
+    return undefined;
+  };
+
+  const getReferencedId = (noti: Notification) => {
+    if (!noti.referenced) return "";
+    if (typeof noti.referenced === "string") return noti.referenced;
+    return noti.referenced.id || noti.referenced._id || "";
+  };
+
+  const getPreviewImage = (noti: Notification) => {
+    if (noti.previewImage) return noti.previewImage;
+    if (typeof noti.referenced === "object") {
+      return noti.referenced?.media?.[0]?.url;
+    }
+    return undefined;
+  };
+
   const { data: notificationsData, isLoading } = useNotifications();
   const { mutate: markAllAsRead, isPending: isMarkingAll } =
     useMarkAllNotificationsAsRead();
@@ -96,7 +130,7 @@ export function NotificationDropdown() {
     });
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (date: string | Date) => {
     const now = new Date();
     const diffMs = now.getTime() - new Date(date).getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -163,10 +197,12 @@ export function NotificationDropdown() {
                 >
                   <div className="relative flex-shrink-0">
                     <Avatar className="w-10 h-10 border border-white shadow-sm">
+                      <AvatarImage
+                        src={getSenderAvatar(noti)}
+                        alt={getSenderName(noti)}
+                      />
                       <AvatarFallback className="text-sm font-bold bg-slate-100 dark:bg-slate-700">
-                        {typeof noti.senderId === "string"
-                          ? noti.senderId.charAt(0).toUpperCase()
-                          : "N"}
+                        {getSenderName(noti).charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div
@@ -178,12 +214,14 @@ export function NotificationDropdown() {
 
                   <div className="flex-1 min-w-0">
                     <p className="text-sm leading-snug text-slate-900 dark:text-slate-100">
-                      {noti.message}
+                      <span className="font-semibold text-slate-950 dark:text-white">
+                        {getSenderName(noti)}{" "}
+                      </span>
+                      {noti.displayText || noti.message}
                     </p>
                     <p className="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">
                       {formatTime(noti.createdAt)}
                     </p>
-
                     {noti.type === "friend_request" && (
                       <div className="flex gap-2 mt-2">
                         <Button
@@ -192,7 +230,7 @@ export function NotificationDropdown() {
                           onClick={() =>
                             handleAcceptFriendRequest(
                               noti.id,
-                              noti.referenced || "",
+                              getReferencedId(noti),
                             )
                           }
                           disabled={acceptingIds.includes(noti.id)}
@@ -210,7 +248,7 @@ export function NotificationDropdown() {
                           onClick={() =>
                             handleRejectFriendRequest(
                               noti.id,
-                              noti.referenced || "",
+                              getReferencedId(noti),
                             )
                           }
                           disabled={rejectingIds.includes(noti.id)}

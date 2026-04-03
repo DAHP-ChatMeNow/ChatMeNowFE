@@ -12,9 +12,12 @@ import {
 import { io, Socket } from "socket.io-client";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
 import { BASE_SOCKET_URL } from "@/types/utils";
 import { Notification } from "@/types/notification";
+import {
+  normalizeNotification,
+  NotificationsResponse,
+} from "@/api/notification";
 import { Message } from "@/types/message";
 import { MessagesResponse } from "@/api/chat";
 import { ContactsResponse } from "@/api/contact";
@@ -22,48 +25,6 @@ import { User } from "@/types/user";
 import { formatPresenceStatus } from "@/lib/utils";
 
 const SOCKET_URL = BASE_SOCKET_URL;
-
-interface FriendRequestReceivedEvent {
-  requestId: string;
-  sender: {
-    _id: string;
-    displayName: string;
-    avatar?: string;
-  };
-  createdAt: string;
-}
-
-interface FriendRequestAcceptedEvent {
-  acceptedBy: {
-    _id: string;
-    displayName: string;
-    avatar?: string;
-  };
-  requestId: string;
-  receiverInfo?: {
-    _id: string;
-    displayName: string;
-    avatar?: string;
-  };
-}
-
-interface FriendRequestRejectedEvent {
-  rejectedBy: {
-    _id: string;
-    displayName: string;
-  };
-  requestId: string;
-}
-
-interface FriendListUpdatedEvent {
-  newFriend: {
-    _id: string;
-    displayName: string;
-    avatar?: string;
-    bio?: string;
-    isOnline?: boolean;
-  };
-}
 
 interface UserPresenceEvent {
   userId: string;
@@ -96,6 +57,47 @@ interface SocketProviderProps {
 type RealtimeNotificationPayload = Partial<Notification> & {
   senderName?: string;
   content?: string;
+};
+
+const getNotificationId = (notification: Partial<Notification>) => {
+  return notification.id || (notification as { _id?: string })._id || "";
+};
+
+const mergeRealtimeNotification = (
+  oldData: NotificationsResponse | undefined,
+  payload: RealtimeNotificationPayload,
+) => {
+  const normalizedNotification = normalizeNotification(payload);
+  const notificationId = getNotificationId(normalizedNotification);
+  if (!notificationId) return oldData;
+
+  const existingNotifications = oldData?.notifications ?? [];
+  const existingIndex = existingNotifications.findIndex(
+    (item) => getNotificationId(item) === notificationId,
+  );
+
+  const nextNotifications = [...existingNotifications];
+  const nextUnreadCount = oldData?.unreadCount ?? 0;
+  const isUnread = !normalizedNotification.isRead;
+
+  if (existingIndex >= 0) {
+    nextNotifications[existingIndex] = {
+      ...nextNotifications[existingIndex],
+      ...normalizedNotification,
+    };
+
+    return {
+      ...(oldData || { notifications: [], unreadCount: 0 }),
+      notifications: nextNotifications,
+      unreadCount: nextUnreadCount,
+    };
+  }
+
+  return {
+    ...(oldData || { notifications: [], unreadCount: 0 }),
+    notifications: [normalizedNotification, ...existingNotifications],
+    unreadCount: nextUnreadCount + (isUnread ? 1 : 0),
+  };
 };
 
 type RealtimeMessagePayload = Partial<Message> & {
@@ -175,7 +177,6 @@ export function SocketProvider({ children }: SocketProviderProps) {
     }
 
     if (!SOCKET_URL) {
-      console.error("[socket] Ket noi that bai: thieu NEXT_PUBLIC_SOCKET_URL");
       return;
     }
 
@@ -188,10 +189,6 @@ export function SocketProvider({ children }: SocketProviderProps) {
     socketInstance.on("connect", () => {
       socketInstance.emit("setup", userId);
       setIsConnected(true);
-      console.info("[socket] Ket noi thanh cong", {
-        socketId: socketInstance.id,
-        websocketUrl: SOCKET_URL,
-      });
     });
 
     socketInstance.on("connected", () => {
@@ -200,66 +197,36 @@ export function SocketProvider({ children }: SocketProviderProps) {
 
     socketInstance.on("disconnect", () => {
       setIsConnected(false);
-      console.warn("[socket] Da ngat ket noi", {
-        websocketUrl: SOCKET_URL,
-      });
     });
 
-    socketInstance.on("connect_error", (error: Error) => {
+    socketInstance.on("connect_error", () => {
       setIsConnected(false);
-      console.error("[socket] Ket noi that bai", {
-        websocketUrl: SOCKET_URL,
-        message: error?.message || "Unknown error",
-      });
     });
 
-    socketInstance.on(
-      "friend_request_received",
-      (data: FriendRequestReceivedEvent) => {
-        queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
-        toast.info(
-          `${data.sender?.displayName || "Ai đó"} đã gửi lời mời kết bạn`,
-        );
-      },
-    );
+    socketInstance.on("friend_request_received", () => {
+      queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
+    });
 
-    socketInstance.on(
-      "friend_request_accepted",
-      (data: FriendRequestAcceptedEvent) => {
-        queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
-        queryClient.invalidateQueries({ queryKey: ["contacts"] });
-        toast.success(
-          `${data.receiverInfo?.displayName || data.acceptedBy?.displayName || "Người dùng"} đã chấp nhận lời mời kết bạn`,
-        );
-      },
-    );
+    socketInstance.on("friend_request_accepted", () => {
+      queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+    });
 
-    socketInstance.on(
-      "friend_request_rejected",
-      (data: FriendRequestRejectedEvent) => {
-        queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
-        toast.info(
-          `${data.rejectedBy?.displayName || "Người dùng"} đã từ chối lời mời`,
-        );
-      },
-    );
+    socketInstance.on("friend_request_rejected", () => {
+      queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
+    });
 
     socketInstance.on("friend_request_removed", () => {
       queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
-      toast.success("Đã từ chối lời mời kết bạn");
     });
 
-    socketInstance.on("friend_list_updated", (data: FriendListUpdatedEvent) => {
+    socketInstance.on("friend_list_updated", () => {
       queryClient.invalidateQueries({ queryKey: ["friend-requests"] });
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast.success(
-        `Bạn và ${data.newFriend?.displayName || "người dùng"} đã là bạn bè`,
-      );
     });
 
     socketInstance.on("friend_removed", () => {
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
-      toast.info("Một người bạn đã xóa bạn khỏi danh sách");
     });
 
     const handleRealtimeMessage = (payload: RealtimeMessagePayload) => {
@@ -312,13 +279,10 @@ export function SocketProvider({ children }: SocketProviderProps) {
     socketInstance.on("newMessage", handleRealtimeMessage);
 
     const handleNotification = (notification: RealtimeNotificationPayload) => {
-      queryClient.invalidateQueries({ queryKey: ["notifications"] });
-
-      if (notification.type === "like") {
-        toast.info("Ai đó đã thích bài viết của bạn");
-      } else if (notification.type !== "friend_request") {
-        toast.info(notification.message || "Bạn có thông báo mới");
-      }
+      queryClient.setQueryData<NotificationsResponse | undefined>(
+        ["notifications"],
+        (oldData) => mergeRealtimeNotification(oldData, notification),
+      );
     };
 
     socketInstance.on("notification:new", handleNotification);

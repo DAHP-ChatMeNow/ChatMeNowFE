@@ -6,30 +6,40 @@ export interface NotificationsResponse {
   unreadCount: number;
 }
 
-// Helper function to map _id to id for MongoDB compatibility
-const mapMongoId = (obj: any): any => {
-  if (!obj) return obj;
-  
-  if (typeof obj === 'object' && !Array.isArray(obj)) {
-    return {
-      ...obj,
-      id: obj._id || obj.id,
-    };
-  }
-  
-  return obj;
+export const normalizeNotification = (noti: any): Notification => {
+  const referenced = noti?.referenced;
+
+  const normalizedReferenced =
+    referenced && typeof referenced === "object"
+      ? {
+          ...referenced,
+          id: referenced._id || referenced.id,
+        }
+      : referenced;
+
+  return {
+    ...noti,
+    id: noti._id || noti.id,
+    targetUrl: noti.targetUrl,
+    senderName:
+      noti.senderName ||
+      (typeof noti.senderId === "object"
+        ? noti.senderId?.displayName
+        : undefined),
+    senderAvatar:
+      noti.senderAvatar ||
+      (typeof noti.senderId === "object" ? noti.senderId?.avatar : undefined),
+    referenced: normalizedReferenced,
+  };
 };
 
 export const notificationService = {
   getNotifications: async () => {
     const res = await api.get<any>("/notifications");
-    // Map notifications to ensure referenced has proper ID format
-    const notifications = res.data.notifications?.map((noti: any) => ({
-      ...noti,
-      id: noti._id || noti.id,
-      referenced: noti.referenced ? (noti.referenced._id || noti.referenced) : undefined,
-    })) || [];
-    
+    const notifications =
+      res.data.notifications?.map((noti: any) => normalizeNotification(noti)) ||
+      [];
+
     return {
       notifications,
       unreadCount: res.data.unreadCount || 0,

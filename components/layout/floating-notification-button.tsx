@@ -9,7 +9,7 @@ import {
   Loader,
   ChevronRight,
 } from "lucide-react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -26,6 +26,8 @@ import {
   useAcceptFriendRequest as useAcceptFriendRequestContact,
   useRejectFriendRequest as useRejectFriendRequestContact,
 } from "@/hooks/use-contact";
+import { Notification } from "@/types/notification";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 
 const getNotificationIcon = (type: string) => {
@@ -33,7 +35,10 @@ const getNotificationIcon = (type: string) => {
     case "friend_request":
       return <UserPlus className="w-3 h-3 text-white" />;
     case "like":
+    case "post_like":
+    case "post_comment":
       return <Heart className="w-3 h-3 text-white" />;
+    case "video_call":
     case "message":
       return <MessageSquare className="w-3 h-3 text-white" />;
     default:
@@ -46,7 +51,10 @@ const getNotificationBgColor = (type: string) => {
     case "friend_request":
       return "bg-orange-500";
     case "like":
+    case "post_like":
+    case "post_comment":
       return "bg-red-500";
+    case "video_call":
     case "message":
       return "bg-blue-500";
     default:
@@ -55,6 +63,53 @@ const getNotificationBgColor = (type: string) => {
 };
 
 export function FloatingNotificationButton() {
+  const router = useRouter();
+  const getSenderName = (noti: Notification) => {
+    if (noti.senderName?.trim()) return noti.senderName.trim();
+    if (typeof noti.senderId === "object" && noti.senderId?.displayName) {
+      return noti.senderId.displayName;
+    }
+    return "Người dùng";
+  };
+
+  const getSenderAvatar = (noti: Notification) => {
+    if (noti.senderAvatar?.trim()) return noti.senderAvatar.trim();
+    if (typeof noti.senderId === "object" && noti.senderId?.avatar) {
+      return noti.senderId.avatar;
+    }
+    return undefined;
+  };
+
+  const getReferencedId = (noti: Notification) => {
+    if (!noti.referenced) return "";
+    if (typeof noti.referenced === "string") return noti.referenced;
+    return noti.referenced.id || noti.referenced._id || "";
+  };
+
+  const handleOpenNotification = (noti: Notification) => {
+    if (!noti.targetUrl) return;
+    setIsDropdownOpen(false);
+    router.push(noti.targetUrl);
+  };
+
+  const handleAcceptClick = (
+    event: React.MouseEvent,
+    notificationId: string,
+    requestId: string,
+  ) => {
+    event.stopPropagation();
+    handleAcceptFriendRequest(notificationId, requestId);
+  };
+
+  const handleRejectClick = (
+    event: React.MouseEvent,
+    notificationId: string,
+    requestId: string,
+  ) => {
+    event.stopPropagation();
+    handleRejectFriendRequest(notificationId, requestId);
+  };
+
   const { data: notificationsData, isLoading } = useNotifications();
   const { mutate: markAllAsRead, isPending: isMarkingAll } =
     useMarkAllNotificationsAsRead();
@@ -167,7 +222,7 @@ export function FloatingNotificationButton() {
     });
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (date: string | Date) => {
     const now = new Date();
     const diffMs = now.getTime() - new Date(date).getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -195,7 +250,7 @@ export function FloatingNotificationButton() {
         <DropdownMenuTrigger asChild>
           <div
             onMouseDown={handleMouseDown}
-            className="relative bg-white dark:bg-slate-800 rounded-full shadow-2xl p-4 hover:scale-105 transition-all border-2 border-blue-100 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-700"
+            className="relative p-4 transition-all bg-white border-2 border-blue-100 rounded-full shadow-2xl dark:bg-slate-800 hover:scale-105 dark:border-blue-900/50 hover:border-blue-300 dark:hover:border-blue-700"
           >
             <Bell className="w-6 h-6 text-blue-600 dark:text-blue-400" />
             {unreadCount > 0 && (
@@ -213,7 +268,7 @@ export function FloatingNotificationButton() {
       <DropdownMenuContent
         align="end"
         side="left"
-        className="w-96 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-2xl p-0 rounded-2xl"
+        className="p-0 bg-white border shadow-2xl w-96 dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-2xl"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
@@ -224,7 +279,7 @@ export function FloatingNotificationButton() {
             <Button
               variant="ghost"
               size="sm"
-              className="text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 text-xs font-semibold h-7 px-2"
+              className="px-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950 h-7"
               onClick={() => markAllAsRead()}
               disabled={isMarkingAll}
             >
@@ -244,40 +299,55 @@ export function FloatingNotificationButton() {
               {recentNotifications.map((noti, index) => (
                 <div
                   key={`${noti.id}-${index}`}
-                  className="flex items-start gap-3 px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors cursor-pointer"
+                  onClick={() => handleOpenNotification(noti)}
+                  role={noti.targetUrl ? "button" : undefined}
+                  tabIndex={noti.targetUrl ? 0 : -1}
+                  onKeyDown={(event) => {
+                    if (!noti.targetUrl) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleOpenNotification(noti);
+                    }
+                  }}
+                  className={`flex items-start gap-3 px-4 py-3 transition-colors ${noti.targetUrl ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50" : "cursor-default"}`}
                 >
                   <div className="relative flex-shrink-0">
-                    <Avatar className="h-10 w-10 border border-white shadow-sm">
-                      <AvatarFallback className="bg-slate-100 dark:bg-slate-700 font-bold text-sm">
-                        {typeof noti.senderId === "string"
-                          ? noti.senderId.charAt(0).toUpperCase()
-                          : "N"}
+                    <Avatar className="w-10 h-10 border border-white shadow-sm">
+                      <AvatarImage
+                        src={getSenderAvatar(noti)}
+                        alt={getSenderName(noti)}
+                      />
+                      <AvatarFallback className="text-sm font-bold bg-slate-100 dark:bg-slate-700">
+                        {getSenderName(noti).charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div
-                      className={`absolute -bottom-0.5 -right-0.5 p-1 rounded-full border-2 border-white dark:border-slate-800 ${getNotificationBgColor(noti.type)}`}
+                      className={`absolute -right-1 -top-1 p-0.5 rounded-full border border-white dark:border-slate-800 ${getNotificationBgColor(noti.type)}`}
                     >
                       {getNotificationIcon(noti.type)}
                     </div>
                   </div>
 
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-slate-900 dark:text-slate-100 leading-snug">
-                      {noti.message}
+                    <p className="text-sm leading-snug text-slate-900 dark:text-slate-100">
+                      <span className="font-semibold text-slate-950 dark:text-white">
+                        {getSenderName(noti)}{" "}
+                      </span>
+                      {noti.displayText || noti.message}
                     </p>
-                    <p className="text-xs text-blue-600 dark:text-blue-400 font-medium mt-1">
+                    <p className="mt-1 text-xs font-medium text-blue-600 dark:text-blue-400">
                       {formatTime(noti.createdAt)}
                     </p>
-
                     {noti.type === "friend_request" && (
                       <div className="flex gap-2 mt-2">
                         <Button
                           size="sm"
-                          className="bg-blue-600 hover:bg-blue-700 h-7 px-3 rounded-lg text-xs"
-                          onClick={() =>
-                            handleAcceptFriendRequest(
+                          className="px-3 text-xs bg-blue-600 rounded-lg hover:bg-blue-700 h-7"
+                          onClick={(event) =>
+                            handleAcceptClick(
+                              event,
                               noti.id,
-                              noti.referenced || "",
+                              getReferencedId(noti),
                             )
                           }
                           disabled={acceptingIds.includes(noti.id)}
@@ -291,11 +361,12 @@ export function FloatingNotificationButton() {
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 px-3 rounded-lg text-xs border-slate-300 dark:border-slate-600"
-                          onClick={() =>
-                            handleRejectFriendRequest(
+                          className="px-3 text-xs rounded-lg h-7 border-slate-300 dark:border-slate-600"
+                          onClick={(event) =>
+                            handleRejectClick(
+                              event,
                               noti.id,
-                              noti.referenced || "",
+                              getReferencedId(noti),
                             )
                           }
                           disabled={rejectingIds.includes(noti.id)}
@@ -317,7 +388,7 @@ export function FloatingNotificationButton() {
               ))}
             </div>
           ) : (
-            <div className="text-center py-12 text-slate-500 dark:text-slate-400">
+            <div className="py-12 text-center text-slate-500 dark:text-slate-400">
               <Bell className="w-12 h-12 mx-auto mb-3 opacity-30" />
               <p className="text-sm">Không có thông báo mới</p>
             </div>
@@ -333,8 +404,8 @@ export function FloatingNotificationButton() {
               className="block"
               onClick={() => setIsDropdownOpen(false)}
             >
-              <div className="px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-colors">
-                <p className="text-center text-sm font-semibold text-blue-600 dark:text-blue-400 flex items-center justify-center gap-1">
+              <div className="px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/50">
+                <p className="flex items-center justify-center gap-1 text-sm font-semibold text-center text-blue-600 dark:text-blue-400">
                   Xem tất cả thông báo
                   <ChevronRight className="w-4 h-4" />
                 </p>

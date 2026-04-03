@@ -2,12 +2,14 @@
 
 import { Bell, UserPlus, MessageSquare, Heart, Loader } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 import {
   useNotifications,
   useMarkAllNotificationsAsRead,
 } from "@/hooks/use-notification";
+import { Notification } from "@/types/notification";
 import {
   useAcceptFriendRequest as useAcceptFriendRequestContact,
   useRejectFriendRequest as useRejectFriendRequestContact,
@@ -19,6 +21,7 @@ const getNotificationIcon = (type: string) => {
     case "friend_request":
       return <UserPlus className="w-3 h-3 text-white" />;
     case "like":
+    case "post_like":
       return <Heart className="w-3 h-3 text-white" />;
     case "message":
       return <MessageSquare className="w-3 h-3 text-white" />;
@@ -32,6 +35,7 @@ const getNotificationBgColor = (type: string) => {
     case "friend_request":
       return "bg-orange-500";
     case "like":
+    case "post_like":
       return "bg-red-500";
     case "message":
       return "bg-blue-500";
@@ -41,6 +45,35 @@ const getNotificationBgColor = (type: string) => {
 };
 
 export default function NotificationsPage() {
+  const router = useRouter();
+
+  const getSenderName = (noti: Notification) => {
+    if (noti.senderName) return noti.senderName;
+    if (typeof noti.senderId === "object" && noti.senderId?.displayName) {
+      return noti.senderId.displayName;
+    }
+    return "Người dùng";
+  };
+
+  const getSenderAvatar = (noti: Notification) => {
+    if (noti.senderAvatar) return noti.senderAvatar;
+    if (typeof noti.senderId === "object" && noti.senderId?.avatar) {
+      return noti.senderId.avatar;
+    }
+    return undefined;
+  };
+
+  const getReferencedId = (noti: Notification) => {
+    if (!noti.referenced) return "";
+    if (typeof noti.referenced === "string") return noti.referenced;
+    return noti.referenced.id || noti.referenced._id || "";
+  };
+
+  const handleOpenNotification = (noti: Notification) => {
+    if (!noti.targetUrl) return;
+    router.push(noti.targetUrl);
+  };
+
   const { data: notificationsData, isLoading, error } = useNotifications();
   const { mutate: markAllAsRead, isPending: isMarkingAll } =
     useMarkAllNotificationsAsRead();
@@ -82,7 +115,7 @@ export default function NotificationsPage() {
     });
   };
 
-  const formatTime = (date: Date) => {
+  const formatTime = (date: string | Date) => {
     const now = new Date();
     const diffMs = now.getTime() - new Date(date).getTime();
     const diffMins = Math.floor(diffMs / 60000);
@@ -126,15 +159,25 @@ export default function NotificationsPage() {
                 <div
                   key={`${noti.id}-${index}`}
                   className={`flex items-start gap-4 p-4 rounded-2xl transition-all cursor-pointer ${noti.isRead ? "hover:bg-slate-50" : "bg-blue-50/40 border border-blue-100 shadow-sm"}`}
+                  onClick={() => handleOpenNotification(noti)}
+                  role={noti.targetUrl ? "button" : undefined}
+                  tabIndex={noti.targetUrl ? 0 : -1}
+                  onKeyDown={(event) => {
+                    if (!noti.targetUrl) return;
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      handleOpenNotification(noti);
+                    }
+                  }}
                 >
                   <div className="relative">
                     <Avatar className="w-12 h-12 border border-white shadow-sm">
+                      <AvatarImage
+                        src={getSenderAvatar(noti)}
+                        alt={getSenderName(noti)}
+                      />
                       <AvatarFallback className="font-bold bg-slate-100">
-                        {typeof noti.senderId === "string"
-                          ? noti.senderId.charAt(0).toUpperCase()
-                          : noti.senderId?.displayName
-                              ?.charAt(0)
-                              .toUpperCase() || "N"}
+                        {getSenderName(noti).charAt(0).toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
                     <div
@@ -146,7 +189,10 @@ export default function NotificationsPage() {
 
                   <div className="flex-1 space-y-1">
                     <p className="text-[14.5px] text-slate-900 leading-tight">
-                      {noti.message}
+                      <span className="font-semibold">
+                        {getSenderName(noti)}{" "}
+                      </span>
+                      {noti.displayText || noti.message}
                     </p>
                     <p className="text-[12px] text-slate-400 font-medium">
                       {formatTime(noti.createdAt)}
@@ -156,12 +202,13 @@ export default function NotificationsPage() {
                         <Button
                           size="sm"
                           className="h-8 px-4 bg-blue-600 rounded-lg hover:bg-blue-700"
-                          onClick={() =>
+                          onClick={(event) => {
+                            event.stopPropagation();
                             handleAcceptFriendRequest(
                               noti.id,
-                              noti.referenced || "",
-                            )
-                          }
+                              getReferencedId(noti),
+                            );
+                          }}
                           disabled={acceptingIds.includes(noti.id)}
                         >
                           {acceptingIds.includes(noti.id) ? (
@@ -174,12 +221,13 @@ export default function NotificationsPage() {
                           size="sm"
                           variant="outline"
                           className="h-8 px-4 rounded-lg"
-                          onClick={() =>
+                          onClick={(event) => {
+                            event.stopPropagation();
                             handleRejectFriendRequest(
                               noti.id,
-                              noti.referenced || "",
-                            )
-                          }
+                              getReferencedId(noti),
+                            );
+                          }}
                           disabled={rejectingIds.includes(noti.id)}
                         >
                           {rejectingIds.includes(noti.id) ? (
