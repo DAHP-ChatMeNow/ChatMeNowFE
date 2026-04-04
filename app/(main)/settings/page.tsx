@@ -17,7 +17,6 @@ import {
   X,
   Loader2,
   Clock,
-  AlertTriangle,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -91,7 +90,6 @@ export default function SettingsPage() {
   const [showPhoneDialog, setShowPhoneDialog] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [activityTab, setActivityTab] = useState<"viewed" | "liked">("viewed");
-  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
@@ -268,7 +266,7 @@ export default function SettingsPage() {
           {/* Logout */}
           <div className="sticky bottom-0 px-4 pt-2 pb-[max(12px,env(safe-area-inset-bottom))] bg-gradient-to-t from-slate-50 via-slate-50 to-transparent dark:from-slate-900 dark:via-slate-900 md:bg-transparent md:static md:px-0 md:pt-0 md:pb-0">
             <button
-              onClick={() => setShowLogoutConfirm(true)}
+              onClick={handleLogout}
               className="flex items-center justify-center w-full gap-3 p-4 font-bold text-red-500 transition-all bg-white border border-red-100 shadow-sm md:p-5 dark:bg-slate-800 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl md:rounded-2xl dark:border-red-900/50"
             >
               <LogOut className="w-5 h-5" />
@@ -534,36 +532,6 @@ export default function SettingsPage() {
             <p className="text-[11px] text-slate-400 text-center">
               Lịch sử hoạt động chỉ hiển thị với bạn
             </p>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Logout Confirm */}
-      <Dialog open={showLogoutConfirm} onOpenChange={setShowLogoutConfirm}>
-        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm bg-white dark:bg-slate-800 rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 dark:text-white">
-              <AlertTriangle className="w-5 h-5 text-red-500" />
-              Xác nhận đăng xuất
-            </DialogTitle>
-          </DialogHeader>
-          <p className="pb-2 text-sm text-slate-500 dark:text-slate-400">
-            Bạn có chắc muốn đăng xuất khỏi tài khoản không?
-          </p>
-          <div className="flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1 dark:border-slate-600 dark:text-white"
-              onClick={() => setShowLogoutConfirm(false)}
-            >
-              Huỷ
-            </Button>
-            <Button
-              className="flex-1 text-white bg-red-600 hover:bg-red-700"
-              onClick={handleLogout}
-            >
-              Đăng xuất
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

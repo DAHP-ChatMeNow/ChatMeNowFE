@@ -27,7 +27,7 @@ export function middleware(request: NextRequest) {
     // Root path with auth → redirect to dashboard
     if (pathname === "/") {
       if (token && role === "admin") {
-        return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+        return NextResponse.redirect(new URL("/admin/users", request.url));
       }
       return NextResponse.redirect(new URL("/admin/login", request.url));
     }
@@ -42,7 +42,7 @@ export function middleware(request: NextRequest) {
     // Admin login page — allow unauthenticated, redirect if already logged in
     if (pathname === "/admin/login") {
       if (token && role === "admin") {
-        return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+        return NextResponse.redirect(new URL("/admin/users", request.url));
       }
       return NextResponse.next();
     }
@@ -61,7 +61,7 @@ export function middleware(request: NextRequest) {
   if (pathname.startsWith("/admin")) {
     if (pathname === "/admin/login") {
       if (token && role === "admin") {
-        return NextResponse.redirect(new URL("/admin/dashboard", request.url));
+        return NextResponse.redirect(new URL("/admin/users", request.url));
       }
       return NextResponse.next();
     }

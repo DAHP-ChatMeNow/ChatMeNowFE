@@ -1,3 +1,5 @@
+export type AccountStatus = "active" | "suspended" | "locked";
+
 export interface User {
   id: string;
   _id?: string;
@@ -17,5 +19,8 @@ export interface User {
   isFriend?: boolean;
   mutualFriendsCount?: number;
   friends: string[];
+  accountStatus?: AccountStatus;
+  suspendedUntil?: string | Date;
+  statusReason?: string;
   createdAt: Date;
 }

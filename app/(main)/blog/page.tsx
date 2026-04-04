@@ -38,6 +38,7 @@ import { Post, PostMedia } from "@/types/post";
 import { toast } from "sonner";
 import { PostMediaLightbox } from "@/components/post/post-media-lightbox";
 import { StoryViewer } from "@/components/post/story-viewer";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type MediaPreview = {
   url: string;
@@ -69,11 +70,15 @@ const getVideoDuration = (file: File): Promise<number> =>
   });
 
 export default function BlogPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const targetPostId = searchParams.get("postId");
   const [postContent, setPostContent] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [mediaPreviews, setMediaPreviews] = useState<MediaPreview[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [expandedPostId, setExpandedPostId] = useState<string | null>(null);
+  const [popupPostId, setPopupPostId] = useState<string | null>(null);
   const [commentInputs, setCommentInputs] = useState<Record<string, string>>(
     {},
   );
@@ -238,9 +243,7 @@ export default function BlogPage() {
   };
 
   const handleLike = (postId: string, isLiked: boolean) => {
-    if (!isLiked) {
-      likePost({ postId });
-    }
+    likePost({ postId, isLiked });
   };
 
   const handleAddComment = (postId: string) => {
@@ -289,8 +292,27 @@ export default function BlogPage() {
     ).values(),
   );
 
+  useEffect(() => {
+    setPopupPostId(targetPostId);
+  }, [targetPostId]);
+
+  const popupPost = popupPostId
+    ? allPosts.find((post) => post.id === popupPostId)
+    : null;
+
+  useEffect(() => {
+    if (!popupPost) return;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [popupPost]);
+
   return (
-    <div className="flex flex-col w-full h-full max-w-full overflow-x-hidden bg-slate-50/50">
+    <div className="relative flex flex-col w-full h-full max-w-full overflow-x-hidden bg-slate-50/50">
       <ScrollArea className="flex-1 w-full min-w-0">
         <div className="w-full max-w-3xl min-w-0 px-0 py-0 pb-8 mx-auto space-y-4 overflow-x-hidden md:max-w-3xl md:py-6 md:px-6 lg:max-w-4xl">
           {/* Create Post */}
@@ -425,46 +447,47 @@ export default function BlogPage() {
               />
 
               {storyGroups.map((group, groupIndex) => {
-                const cover = group.stories[group.stories.length - 1]?.media?.url;
+                const cover =
+                  group.stories[group.stories.length - 1]?.media?.url;
                 return (
-                <button
-                  key={`${group.user?._id || group.user?.id}-${groupIndex}`}
-                  type="button"
-                  onClick={() => handleOpenStoryGroup(groupIndex)}
-                  className="relative flex-shrink-0 w-[110px] h-[190px] md:w-[120px] md:h-[200px] rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform"
-                >
-                  {/* Background Image */}
-                  {cover ? (
-                    <div
-                      className="absolute inset-0 bg-center bg-cover"
-                      style={{ backgroundImage: `url(${cover})` }}
-                    >
-                      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/60" />
-                    </div>
-                  ) : (
-                    <div className="absolute inset-0 bg-slate-300" />
-                  )}
+                  <button
+                    key={`${group.user?._id || group.user?.id}-${groupIndex}`}
+                    type="button"
+                    onClick={() => handleOpenStoryGroup(groupIndex)}
+                    className="relative flex-shrink-0 w-[110px] h-[190px] md:w-[120px] md:h-[200px] rounded-xl overflow-hidden group hover:scale-[1.02] transition-transform"
+                  >
+                    {/* Background Image */}
+                    {cover ? (
+                      <div
+                        className="absolute inset-0 bg-center bg-cover"
+                        style={{ backgroundImage: `url(${cover})` }}
+                      >
+                        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/60" />
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 bg-slate-300" />
+                    )}
 
-                  {/* Avatar with blue ring at top-left */}
-                  <div className="absolute top-3 left-3">
-                    <div
-                      className={`p-0.5 rounded-full ${group.hasUnviewed ? "bg-blue-500" : "bg-slate-300"}`}
-                    >
-                      <PresignedAvatar
-                        avatarKey={group.user?.avatar}
-                        displayName={group.user?.displayName}
-                        className="border-2 border-white w-9 h-9"
-                      />
+                    {/* Avatar with blue ring at top-left */}
+                    <div className="absolute top-3 left-3">
+                      <div
+                        className={`p-0.5 rounded-full ${group.hasUnviewed ? "bg-blue-500" : "bg-slate-300"}`}
+                      >
+                        <PresignedAvatar
+                          avatarKey={group.user?.avatar}
+                          displayName={group.user?.displayName}
+                          className="border-2 border-white w-9 h-9"
+                        />
+                      </div>
                     </div>
-                  </div>
 
-                  {/* Name at bottom */}
-                  <div className="absolute bottom-0 left-0 right-0 p-3">
-                    <span className="text-xs font-semibold text-white drop-shadow-lg line-clamp-2">
-                      {group.user?.displayName}
-                    </span>
-                  </div>
-                </button>
+                    {/* Name at bottom */}
+                    <div className="absolute bottom-0 left-0 right-0 p-3">
+                      <span className="text-xs font-semibold text-white drop-shadow-lg line-clamp-2">
+                        {group.user?.displayName}
+                      </span>
+                    </div>
+                  </button>
                 );
               })}
             </div>
@@ -537,6 +560,58 @@ export default function BlogPage() {
           )}
         </div>
       </ScrollArea>
+
+      {popupPost ? (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center p-3 bg-black/70 backdrop-blur-sm md:p-6"
+          onClick={() => router.replace("/blog")}
+        >
+          <div
+            className="relative w-full max-w-3xl max-h-[92vh] overflow-hidden bg-white rounded-2xl shadow-2xl"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              onClick={() => router.replace("/blog")}
+              className="absolute z-10 flex items-center justify-center w-10 h-10 text-white rounded-full top-3 right-3 bg-black/40 hover:bg-black/60"
+              aria-label="Đóng bài viết"
+            >
+              <X className="w-6 h-6" />
+            </button>
+
+            <div className="px-5 py-4 border-b border-slate-100">
+              <p className="text-lg font-bold text-center text-slate-900">
+                Bài viết
+              </p>
+              <p className="mt-1 text-xs text-center text-slate-500">
+                Xem bài viết đã được mở từ thông báo
+              </p>
+            </div>
+
+            <div className="max-h-[calc(92vh-72px)] overflow-y-auto bg-slate-50/60">
+              <ProfilePostCard
+                post={popupPost}
+                isExpanded={true}
+                onToggleExpand={() => undefined}
+                onLike={() =>
+                  handleLike(
+                    popupPost.id,
+                    popupPost.isLikedByCurrentUser || false,
+                  )
+                }
+                currentUserAvatar={user?.avatar}
+                currentUserDisplayName={user?.displayName}
+                commentInput={commentInputs[popupPost.id] || ""}
+                onCommentInputChange={(value) =>
+                  setCommentInputs({ ...commentInputs, [popupPost.id]: value })
+                }
+                onAddComment={() => handleAddComment(popupPost.id)}
+                isAddingComment={isAddingComment}
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

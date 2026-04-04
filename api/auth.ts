@@ -1,9 +1,19 @@
 import api from "@/lib/axios";
 import { User } from "@/types/user";
+import {
+  RememberedAccountInfoQuery,
+  RememberedAccountInfoResponse,
+  RememberedLoginPayload,
+  RevokeRememberedAccountPayload,
+} from "@/types/auth";
 
 export type LoginPayload = {
   email: string;
   password: string;
+  rememberAccount?: boolean;
+  deviceId?: string;
+  deviceName?: string;
+  turnstileToken?: string;
 };
 
 export type RegisterPayload = {
@@ -15,6 +25,7 @@ export type RegisterPayload = {
 export type AuthResponse = {
   user: User;
   token: string;
+  rememberToken?: string;
   role?: string;
   message?: string;
 };
@@ -24,8 +35,43 @@ export type GetMeResponse = {
   user: User;
 };
 
+export type RememberedLoginResponse = AuthResponse;
+
+export type RevokeResponse = {
+  success: boolean;
+  message: string;
+};
+
 const login = async (payload: LoginPayload) => {
   const { data } = await api.post<AuthResponse>("/auth/login", payload);
+  return data;
+};
+
+const rememberedLogin = async (payload: RememberedLoginPayload) => {
+  const { data } = await api.post<RememberedLoginResponse>(
+    "/auth/remembered-login",
+    payload,
+  );
+  return data;
+};
+
+const getRememberedAccountInfo = async (query: RememberedAccountInfoQuery) => {
+  const { data } = await api.get<RememberedAccountInfoResponse>(
+    "/auth/remembered-account",
+    {
+      params: query,
+    },
+  );
+  return data;
+};
+
+const revokeRememberedAccount = async (
+  payload: RevokeRememberedAccountPayload,
+) => {
+  const { data } = await api.post<RevokeResponse>(
+    "/auth/remembered-account/revoke",
+    payload,
+  );
   return data;
 };
 
@@ -36,7 +82,14 @@ const register = async (payload: RegisterPayload) => {
 
 const getMe = async () => {
   const { data } = await api.get<GetMeResponse>("/auth/getMe");
-  return data.user; // Extract user from response
+  return data.user;
 };
 
-export const authService = { login, register, getMe };
+export const authService = {
+  login,
+  register,
+  getMe,
+  rememberedLogin,
+  getRememberedAccountInfo,
+  revokeRememberedAccount,
+};

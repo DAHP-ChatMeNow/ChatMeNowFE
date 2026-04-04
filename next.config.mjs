@@ -5,6 +5,16 @@ const nextConfig = {
   ...(process.env.NEXT_EXPORT === "true" ? { output: "export" } : {}),
   images: {
     unoptimized: true,
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "**",
+      },
+      {
+        protocol: "http",
+        hostname: "**",
+      },
+    ],
   },
 };
 

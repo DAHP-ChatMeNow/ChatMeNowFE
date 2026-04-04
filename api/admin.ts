@@ -1,4 +1,6 @@
 import api from "@/lib/axios";
+import { AccountStatus } from "@/types/user";
+import { userService, UpdateAccountStatusPayload } from "@/api/user";
 
 // ===================== Users =====================
 export interface AdminUser {
@@ -10,6 +12,9 @@ export interface AdminUser {
   avatar?: string;
   role: string;
   isActive: boolean;
+  accountStatus?: AccountStatus;
+  suspendedUntil?: string;
+  statusReason?: string;
   isPremium?: boolean;
   createdAt: string;
 }
@@ -18,13 +23,69 @@ export interface AdminUsersResponse {
   success: boolean;
   users: AdminUser[];
   total: number;
+  offset?: number;
+  limit?: number;
   page: number;
   totalPages: number;
+  hasNext?: boolean;
+  hasPrev?: boolean;
 }
 
-const getUsers = async (page = 1, limit = 20, search = "") => {
+export type AdminUserRoleFilter = "all" | "user" | "admin";
+export type AdminUserStatusFilter =
+  | "all"
+  | "active"
+  | "suspended"
+  | "locked"
+  | "inactive"
+  | "premium";
+export type AdminUserSortBy =
+  | "newest"
+  | "oldest"
+  | "name_asc"
+  | "name_desc"
+  | "online_first";
+
+export interface AdminUsersQueryParams {
+  offset?: number;
+  limit?: number;
+  search?: string;
+  role?: AdminUserRoleFilter;
+  status?: AdminUserStatusFilter;
+  sortBy?: AdminUserSortBy;
+  dateFrom?: string;
+  dateTo?: string;
+  // Keep for backward compatibility if an old caller still passes page.
+  page?: number;
+}
+
+const getUsers = async ({
+  offset = 0,
+  limit = 7,
+  search = "",
+  role = "all",
+  status = "all",
+  sortBy = "newest",
+  dateFrom = "",
+  dateTo = "",
+  page,
+}: AdminUsersQueryParams = {}) => {
+  const safeLimit = Math.min(Math.max(limit, 1), 100);
+  const safeOffset = Math.max(offset, 0);
+  const fallbackPage = Math.floor(safeOffset / safeLimit) + 1;
+
   const { data } = await api.get<AdminUsersResponse>("/users/all", {
-    params: { page, limit, search },
+    params: {
+      offset: safeOffset,
+      limit: safeLimit,
+      search,
+      role,
+      status,
+      sortBy,
+      ...(dateFrom ? { dateFrom } : {}),
+      ...(dateTo ? { dateTo } : {}),
+      page: page ?? fallbackPage,
+    },
   });
   return data;
 };
@@ -34,9 +95,11 @@ const toggleUserActive = async (userId: string, isActive: boolean) => {
   return data;
 };
 
-const deleteUser = async (userId: string) => {
-  const { data } = await api.delete(`/admin/users/${userId}`);
-  return data;
+const updateUserAccountStatus = async (
+  userId: string,
+  payload: UpdateAccountStatusPayload,
+) => {
+  return userService.updateAccountStatus(userId, payload);
 };
 
 // ===================== Posts =====================
@@ -100,7 +163,7 @@ const getStats = async () => {
 export const adminService = {
   getUsers,
   toggleUserActive,
-  deleteUser,
+  updateUserAccountStatus,
   getPosts,
   approvePost,
   rejectPost,
