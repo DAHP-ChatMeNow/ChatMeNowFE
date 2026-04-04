@@ -1,6 +1,8 @@
 import api from "@/lib/axios";
 import { User } from "@/types/user";
 import {
+  RememberedAccountInfoQuery,
+  RememberedAccountInfoResponse,
   RememberedLoginPayload,
   RevokeRememberedAccountPayload,
 } from "@/types/auth";
@@ -53,6 +55,16 @@ const rememberedLogin = async (payload: RememberedLoginPayload) => {
   return data;
 };
 
+const getRememberedAccountInfo = async (query: RememberedAccountInfoQuery) => {
+  const { data } = await api.get<RememberedAccountInfoResponse>(
+    "/auth/remembered-account",
+    {
+      params: query,
+    },
+  );
+  return data;
+};
+
 const revokeRememberedAccount = async (
   payload: RevokeRememberedAccountPayload,
 ) => {
@@ -78,5 +90,6 @@ export const authService = {
   register,
   getMe,
   rememberedLogin,
+  getRememberedAccountInfo,
   revokeRememberedAccount,
 };

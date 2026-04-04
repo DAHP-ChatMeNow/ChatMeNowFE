@@ -2,11 +2,12 @@
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { TurnstileWidget } from "@/components/auth/turnstile-widget";
 import { useAdminLogin } from "@/hooks/use-auth";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Eye, EyeOff, Mail, Lock, ShieldCheck } from "lucide-react";
 
 const loginSchema = z.object({
@@ -19,6 +20,13 @@ type LoginFormValues = z.infer<typeof loginSchema>;
 export default function AdminLoginPage() {
   const { mutate: login, isPending } = useAdminLogin();
   const [showPassword, setShowPassword] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState("");
+  const [turnstileError, setTurnstileError] = useState("");
+  const [loginError, setLoginError] = useState("");
+  const [turnstileResetSignal, setTurnstileResetSignal] = useState(0);
+
+  const turnstileSiteKey =
+    process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY ?? "";
 
   const {
     register,
@@ -28,8 +36,48 @@ export default function AdminLoginPage() {
     resolver: zodResolver(loginSchema),
   });
 
+  const formErrorMessage = useMemo(() => {
+    if (loginError) return loginError;
+    if (turnstileError) return turnstileError;
+    return "";
+  }, [loginError, turnstileError]);
+
   const onSubmit = (data: LoginFormValues) => {
-    login(data);
+    setLoginError("");
+    setTurnstileError("");
+
+    if (!turnstileSiteKey) {
+      setTurnstileError(
+        "Thiếu site key Turnstile. Hãy cấu hình NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY.",
+      );
+      return;
+    }
+
+    if (!turnstileToken) {
+      setTurnstileError(
+        "Vui lòng hoàn thành xác thực Turnstile trước khi đăng nhập.",
+      );
+      return;
+    }
+
+    login(
+      {
+        ...data,
+        turnstileToken,
+      },
+      {
+        onError: (error) => {
+          const message =
+            error instanceof Error
+              ? error.message
+              : "Đăng nhập thất bại. Vui lòng thử lại.";
+
+          setLoginError(message);
+          setTurnstileToken("");
+          setTurnstileResetSignal((prev) => prev + 1);
+        },
+      },
+    );
   };
 
   return (
@@ -105,10 +153,44 @@ export default function AdminLoginPage() {
               )}
             </div>
 
+            <div className="flex flex-col items-center space-y-2">
+              {turnstileSiteKey ? (
+                <TurnstileWidget
+                  siteKey={turnstileSiteKey}
+                  resetSignal={turnstileResetSignal}
+                  onVerify={(token) => {
+                    setTurnstileToken(token);
+                    setTurnstileError("");
+                  }}
+                  onExpire={() => {
+                    setTurnstileToken("");
+                    setTurnstileError(
+                      "Phiên xác thực Turnstile đã hết hạn. Vui lòng xác thực lại.",
+                    );
+                  }}
+                  onError={(message) => {
+                    setTurnstileToken("");
+                    setTurnstileError(message);
+                  }}
+                />
+              ) : (
+                <p className="text-xs text-red-600">
+                  Thiếu site key Turnstile. Hãy thêm biến môi trường
+                  NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY.
+                </p>
+              )}
+            </div>
+
+            {formErrorMessage && (
+              <p className="text-sm text-red-600" role="alert">
+                {formErrorMessage}
+              </p>
+            )}
+
             {/* Submit Button */}
             <Button
               type="submit"
-              disabled={isPending}
+              disabled={isPending || !turnstileSiteKey}
               className="w-full h-12 font-semibold text-white transition-all shadow-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {isPending ? (

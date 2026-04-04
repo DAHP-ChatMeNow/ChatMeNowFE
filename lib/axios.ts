@@ -19,4 +19,54 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+const ACCOUNT_STATUS_ERROR_CODE = new Set([
+  "ACCOUNT_LOCKED",
+  "ACCOUNT_SUSPENDED",
+  "ACCOUNT_INACTIVE",
+]);
+
+const isAccountStatusRejection = (error: unknown) => {
+  if (!axios.isAxiosError(error)) return false;
+
+  const status = error.response?.status;
+  if (status !== 401 && status !== 403) return false;
+
+  const data =
+    (error.response?.data as
+      | { code?: string; errorCode?: string; message?: string }
+      | undefined) ?? {};
+
+  const code = data.code || data.errorCode;
+  if (code && ACCOUNT_STATUS_ERROR_CODE.has(code)) {
+    return true;
+  }
+
+  const message = (data.message || "").toLowerCase();
+  return /(account status|suspended|locked|inactive|đình chỉ|bị khóa|khóa tài khoản)/i.test(
+    message,
+  );
+};
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const hasToken = Boolean(useAuthStore.getState().token);
+    const requestUrl = String(error?.config?.url || "");
+    const isAuthEndpoint = /\/auth\/(login|register|remembered-login)/i.test(
+      requestUrl,
+    );
+
+    if (hasToken && !isAuthEndpoint && isAccountStatusRejection(error)) {
+      useAuthStore.getState().logout();
+
+      if (typeof window !== "undefined") {
+        const isAdminPath = window.location.pathname.startsWith("/admin");
+        window.location.replace(isAdminPath ? "/admin/login" : "/login");
+      }
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 export default api;

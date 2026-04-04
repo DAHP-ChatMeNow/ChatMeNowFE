@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import { User } from "@/types/user";
+import { User, AccountStatus } from "@/types/user";
 
 export interface UpdateProfilePayload {
   displayName?: string;
@@ -9,6 +9,18 @@ export interface UpdateProfilePayload {
 }
 
 export interface UpdateProfileResponse {
+  user: User;
+  message: string;
+}
+
+export interface UpdateAccountStatusPayload {
+  accountStatus: AccountStatus;
+  suspendedUntil?: string; // ISO format or YYYY-MM-DD
+  statusReason?: string;
+}
+
+export interface UpdateAccountStatusResponse {
+  success: boolean;
   user: User;
   message: string;
 }
@@ -193,6 +205,22 @@ export const userService = {
       phoneNumber?: string;
       displayName: string;
     }>(`/users/${userId}/email`);
+    return res.data;
+  },
+
+  /**
+   * Update account status (active, suspended, locked)
+   * @param userId - User ID to update
+   * @param data - Account status update payload
+   */
+  updateAccountStatus: async (
+    userId: string,
+    data: UpdateAccountStatusPayload,
+  ) => {
+    const res = await api.put<UpdateAccountStatusResponse>(
+      `/users/${userId}/account-status`,
+      data,
+    );
     return res.data;
   },
 };

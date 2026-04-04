@@ -22,11 +22,38 @@ import { getDefaultRouteForClient } from "@/lib/default-route";
 
 const getErrorMessage = (error: unknown) => {
   if (isAxiosError(error)) {
-    return (
-      (error.response?.data as { message?: string })?.message ||
-      error.message ||
-      "Đã xảy ra lỗi. Vui lòng thử lại."
-    );
+    const status = error.response?.status;
+    const data =
+      (error.response?.data as
+        | { message?: string; code?: string; errorCode?: string }
+        | undefined) ?? {};
+    const code = data.code || data.errorCode;
+    const rawMessage = data.message || "";
+    const normalizedMessage = rawMessage.toLowerCase();
+
+    const isAccountLocked =
+      code === "ACCOUNT_LOCKED" ||
+      /(locked|bị khóa|khoa tai khoan)/i.test(normalizedMessage);
+    const isAccountSuspended =
+      code === "ACCOUNT_SUSPENDED" ||
+      /(suspended|đình chỉ|dinh chi)/i.test(normalizedMessage);
+    const isAccountInactive =
+      code === "ACCOUNT_INACTIVE" ||
+      /(inactive|vô hiệu|vo hieu)/i.test(normalizedMessage);
+
+    if ((status === 401 || status === 403) && isAccountLocked) {
+      return "Tài khoản của bạn đã bị khóa. Vui lòng liên hệ quản trị viên.";
+    }
+
+    if ((status === 401 || status === 403) && isAccountSuspended) {
+      return "Tài khoản của bạn đang bị đình chỉ tạm thời.";
+    }
+
+    if ((status === 401 || status === 403) && isAccountInactive) {
+      return "Tài khoản của bạn hiện không thể đăng nhập.";
+    }
+
+    return data.message || error.message || "Đã xảy ra lỗi. Vui lòng thử lại.";
   }
   if (error instanceof Error) return error.message;
   return "Đã xảy ra lỗi. Vui lòng thử lại.";
@@ -114,7 +141,7 @@ export const useAdminLogin = () => {
       }
       setAuth(data.user, data.token, data.role);
       toast.success(data.message ?? "Đăng nhập thành công");
-      router.push("/admin/dashboard");
+      router.push("/admin/users");
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
