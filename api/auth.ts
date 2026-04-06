@@ -81,7 +81,7 @@ const register = async (payload: RegisterPayload) => {
 };
 
 const getMe = async () => {
-  const { data } = await api.get<GetMeResponse>("/auth/getMe");
+  const { data } = await api.get<GetMeResponse>("/auth/me");
   return data.user;
 };
 

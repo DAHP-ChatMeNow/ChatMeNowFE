@@ -1,6 +1,6 @@
 import api from "@/lib/axios";
 import { Conversation } from "@/types/conversation";
-import { Message } from "@/types/message";
+import { Message, MessageAttachment } from "@/types/message";
 
 export interface ConversationsResponse {
   conversations: Conversation[];
@@ -26,6 +26,30 @@ export interface MessagesResponse {
 export interface GetMessagesParams {
   limit?: number;
   beforeId?: string;
+}
+
+export interface ChatUploadPresignPutPayload {
+  fileName: string;
+  contentType: string;
+  fileSize: number;
+}
+
+export interface ChatUploadPresignPutResponse {
+  uploadUrl: string;
+  key: string;
+  fileName?: string;
+  contentType?: string;
+  fileSize?: number;
+  expiresIn?: number;
+}
+
+export type UploadProgressCallback = (progressPercent: number) => void;
+
+export interface SendMessagePayload {
+  conversationId: string;
+  content: string;
+  type: string;
+  attachments?: MessageAttachment[];
 }
 
 export interface PartnerResponse {
@@ -309,13 +333,56 @@ export const chatService = {
   },
 
   // Gửi message
-  sendMessage: async (data: {
-    conversationId: string;
-    content: string;
-    type: string;
-  }) => {
+  sendMessage: async (data: SendMessagePayload) => {
     const res = await api.post<Message>("/chat/messages", data);
     return mapMongoId(res.data);
+  },
+
+  createChatUploadPresignPut: async (payload: ChatUploadPresignPutPayload) => {
+    const res = await api.post<ChatUploadPresignPutResponse>(
+      "/upload/chat/presign-put",
+      payload,
+    );
+    return res.data;
+  },
+
+  uploadToPresignedUrl: async (
+    uploadUrl: string,
+    file: File,
+    onProgress?: UploadProgressCallback,
+  ) => {
+    await new Promise<void>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", uploadUrl, true);
+      xhr.setRequestHeader(
+        "Content-Type",
+        file.type || "application/octet-stream",
+      );
+
+      xhr.upload.onprogress = (event) => {
+        if (!onProgress || !event.lengthComputable) return;
+        const progress = Math.min(
+          100,
+          Math.round((event.loaded / event.total) * 100),
+        );
+        onProgress(progress);
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          resolve();
+          return;
+        }
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      };
+
+      xhr.onerror = () => {
+        reject(new Error("Upload failed due to network error"));
+      };
+
+      xhr.send(file);
+    });
   },
 
   unsendMessage: async (messageId: string): Promise<Message> => {

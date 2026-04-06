@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   X,
   MoreHorizontal,
@@ -55,6 +55,8 @@ export function PostMediaLightbox({
   onClose,
 }: PostMediaLightboxProps) {
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const lastTapRef = useRef<number>(0);
   const likeCount = likesCount ?? 0;
   const commentCount = commentsCount ?? 0;
   const hasStats = likeCount > 0 || commentCount > 0;
@@ -91,15 +93,72 @@ export function PostMediaLightbox({
   const canGoPrev = currentIndex > 0;
   const canGoNext = currentIndex < media.length - 1;
 
+  const mediaType = String(currentMedia.type || "")
+    .trim()
+    .toLowerCase();
+  const mediaUrl = String(currentMedia.url || "").toLowerCase();
+  const isVideo =
+    mediaType === "video" ||
+    mediaType.startsWith("video/") ||
+    /\.(mp4|mov|avi|mkv|webm|m4v)(\?|#|$)/i.test(mediaUrl);
+
+  const openVideoFullscreen = () => {
+    const video = videoRef.current;
+    if (!video) return;
+
+    const videoElement = video as HTMLVideoElement & {
+      webkitEnterFullscreen?: () => void;
+    };
+
+    const containerElement = video.parentElement as
+      | (HTMLElement & {
+          webkitRequestFullscreen?: () => Promise<void>;
+        })
+      | null;
+
+    if (videoElement.requestFullscreen) {
+      void videoElement.requestFullscreen().catch(() => undefined);
+      return;
+    }
+
+    if (containerElement?.requestFullscreen) {
+      void containerElement.requestFullscreen().catch(() => undefined);
+      return;
+    }
+
+    if (containerElement?.webkitRequestFullscreen) {
+      void containerElement.webkitRequestFullscreen();
+      return;
+    }
+
+    if (videoElement.webkitEnterFullscreen) {
+      videoElement.webkitEnterFullscreen();
+    }
+  };
+
+  const handleVideoTouchEnd = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 280) {
+      openVideoFullscreen();
+      lastTapRef.current = 0;
+      return;
+    }
+
+    lastTapRef.current = now;
+  };
+
   const renderMedia = () => {
-    if (currentMedia.type === "video") {
+    if (isVideo) {
       return (
         <video
+          ref={videoRef}
           src={currentMedia.url}
           controls
           autoPlay
           playsInline
-          className="max-h-full max-w-full object-contain"
+          onDoubleClick={openVideoFullscreen}
+          onTouchEnd={handleVideoTouchEnd}
+          className="object-contain max-w-full max-h-full"
         />
       );
     }
@@ -108,7 +167,7 @@ export function PostMediaLightbox({
       <img
         src={currentMedia.url}
         alt="media"
-        className="max-h-full max-w-full object-contain"
+        className="object-contain max-w-full max-h-full"
       />
     );
   };
@@ -179,7 +238,7 @@ export function PostMediaLightbox({
 
         <aside className="hidden md:flex md:w-[360px] lg:w-[420px] h-full bg-white text-slate-900 flex-col border-l border-slate-200">
           <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200">
-            <div className="flex items-center gap-3 min-w-0">
+            <div className="flex items-center min-w-0 gap-3">
               <PresignedAvatar
                 avatarKey={author?.avatar}
                 displayName={author?.displayName ?? undefined}
@@ -205,7 +264,7 @@ export function PostMediaLightbox({
 
           <div className="flex-1 p-4 overflow-y-auto">
             {content ? (
-              <p className="text-sm leading-relaxed whitespace-pre-wrap break-words">
+              <p className="text-sm leading-relaxed break-words whitespace-pre-wrap">
                 {content}
               </p>
             ) : (
@@ -259,7 +318,7 @@ export function PostMediaLightbox({
         </aside>
       </div>
 
-      <div className="absolute left-0 right-0 bottom-0 p-4 md:hidden bg-gradient-to-t from-black via-black/95 to-transparent text-white">
+      <div className="absolute bottom-0 left-0 right-0 p-4 text-white md:hidden bg-gradient-to-t from-black via-black/95 to-transparent">
         <p className="text-xl font-semibold truncate">
           {author?.displayName || "User"}
         </p>

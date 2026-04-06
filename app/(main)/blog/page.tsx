@@ -822,16 +822,43 @@ function PostMediaGrid({
   if (!media || media.length === 0) return null;
   const count = media.length;
 
+  const getMediaKind = (item: PostMedia): "image" | "video" => {
+    const mediaType = String(item.type || "")
+      .trim()
+      .toLowerCase();
+    const mediaUrl = String(item.url || "").toLowerCase();
+
+    const isVideoByType =
+      mediaType === "video" || mediaType.startsWith("video/");
+    const isVideoByExt = /\.(mp4|mov|avi|mkv|webm|m4v)(\?|#|$)/i.test(mediaUrl);
+
+    if (isVideoByType || isVideoByExt) return "video";
+    return "image";
+  };
+
   const mediaEl = (item: PostMedia, index: number, cls = "") => {
-    if (item.type === "video") {
+    if (getMediaKind(item) === "video") {
       return (
-        <video
+        <button
           key={item.url}
-          src={item.url}
-          controls
+          type="button"
           onClick={() => onMediaClick?.(index)}
-          className={`w-full h-full object-cover ${cls}`}
-        />
+          className={`relative w-full h-full ${cls}`}
+          aria-label="Xem video"
+        >
+          <video
+            src={item.url}
+            muted
+            playsInline
+            preload="metadata"
+            className="w-full h-full object-cover pointer-events-none"
+          />
+          <span className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/45 text-white text-sm">
+              ▶
+            </span>
+          </span>
+        </button>
       );
     }
     return (

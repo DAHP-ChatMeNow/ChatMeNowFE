@@ -81,7 +81,7 @@ const markTokenValidated = (token: string) => {
 
 const getMeEndpoint = () => {
   if (!BASE_API_URL) return null;
-  return `${BASE_API_URL}/auth/getMe`;
+  return `${BASE_API_URL}/auth/me`;
 };
 
 const validateAuthTokenWithServer = async (force = false) => {

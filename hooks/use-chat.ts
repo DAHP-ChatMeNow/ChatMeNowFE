@@ -11,6 +11,7 @@ import {
   GetMessagesParams,
   SendAiMessagePayload,
 } from "@/api/chat";
+import { MessageAttachment } from "@/types/message";
 import { userService } from "@/api/user";
 import { Message } from "@/types/message";
 import { Conversation } from "@/types/conversation";
@@ -21,6 +22,7 @@ type SendMessageInput = {
   conversationId: string;
   content: string;
   type: string;
+  attachments?: MessageAttachment[];
 };
 
 type SendMessageContext = {
@@ -70,6 +72,7 @@ const createOptimisticMessage = (params: {
   conversationId: string;
   content: string;
   type: string;
+  attachments?: MessageAttachment[];
   currentUserId?: string;
   currentUserName: string;
   currentUserAvatar?: string;
@@ -85,6 +88,7 @@ const createOptimisticMessage = (params: {
   },
   content: params.content,
   type: params.type,
+  attachments: params.attachments,
   createdAt: new Date().toISOString(),
   status: "sending",
   isOptimistic: true,
@@ -250,6 +254,7 @@ export const useSendMessage = () => {
         conversationId: variables.conversationId,
         content: variables.content,
         type: variables.type,
+        attachments: variables.attachments,
         currentUserId,
         currentUserName,
         currentUserAvatar,

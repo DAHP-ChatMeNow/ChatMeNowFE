@@ -21,6 +21,7 @@ import {
 import { Mic, MicOff, Phone, PhoneOff, Video, VideoOff } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +31,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useSocket } from "@/components/providers/socket-provider";
+import { userService } from "@/api/user";
 import { useAuthStore } from "@/store/use-auth-store";
 import { BASE_API_URL } from "@/types/utils";
 import { IncomingCallData, VideoCallType } from "@/types/video-call";
@@ -97,8 +99,6 @@ interface LivekitTokenResponse {
   expiresIn?: number;
 }
 
-type CallDebugMeta = Record<string, unknown>;
-
 const VideoCallContext = createContext<VideoCallContextType | null>(null);
 
 const ROOM_ID_REGEX = /^[A-Za-z0-9_-]+$/;
@@ -118,6 +118,32 @@ const toObject = (value: unknown): Record<string, unknown> => {
     return value as Record<string, unknown>;
   }
   return {};
+};
+
+const toAvatarValue = (value: unknown): string | undefined => {
+  if (!value) return undefined;
+  if (typeof value === "string") return value;
+
+  const obj = toObject(value);
+  const candidates = [
+    obj.key,
+    obj.url,
+    obj.viewUrl,
+    obj.avatar,
+    obj.avatarKey,
+    obj.avatarUrl,
+    obj.avatarViewUrl,
+    obj.secure_url,
+    obj.path,
+  ];
+
+  for (const candidate of candidates) {
+    if (typeof candidate === "string" && candidate.trim()) {
+      return candidate;
+    }
+  }
+
+  return undefined;
 };
 
 const normalizeSignalPayload = (
@@ -228,6 +254,11 @@ const parseIncomingCall = (
   if (!roomId || !callerId) return null;
 
   const caller = toObject(payload.caller);
+  const callerAvatar =
+    toAvatarValue(payload.callerAvatar) ||
+    toAvatarValue(caller.avatar) ||
+    toAvatarValue((caller as Record<string, unknown>).profilePicture) ||
+    toAvatarValue(payload.avatar);
 
   return {
     roomId,
@@ -237,10 +268,7 @@ const parseIncomingCall = (
       (payload.callerName as string | undefined) ||
       (caller.displayName as string | undefined) ||
       "Người dùng",
-    callerAvatar:
-      (payload.callerAvatar as string | undefined) ||
-      (caller.avatar as string | undefined) ||
-      "",
+    callerAvatar: callerAvatar || "",
     receiverId: toId(payload.receiverId) || toId(payload.toUserId),
     callType: (payload.callType as VideoCallType) || "video",
     conversationId: toId(payload.conversationId),
@@ -315,7 +343,6 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   const roomRef = useRef<Room | null>(null);
   const remoteTracksRef = useRef<Map<string, RemoteTrack>>(new Map());
   const localStreamRef = useRef<MediaStream | null>(null);
-  const phaseRef = useRef<CallPhase>("idle");
   const remoteEmptyTimeoutRef = useRef<number | null>(null);
   const activeCallRef = useRef<ActiveCallState | null>(null);
   const incomingCallRef = useRef<IncomingCallData | null>(null);
@@ -325,28 +352,17 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   const stopRingtoneRef = useRef<(() => void) | null>(null);
 
   const isCallEnabled = process.env.NEXT_PUBLIC_ENABLE_CALL === "true";
-  const isCallDebugEnabled = process.env.NEXT_PUBLIC_CALL_DEBUG === "true";
   const livekitEnvUrl = process.env.NEXT_PUBLIC_LIVEKIT_URL;
   const apiKey = process.env.NEXT_PUBLIC_API_KEY;
 
   const callDebug = useCallback(
-    (event: string, meta?: CallDebugMeta) => {
-      if (!isCallDebugEnabled) return;
-
-      const now = new Date().toISOString();
-      console.info(`[CallDebug ${now}] ${event}`, {
-        phase: phaseRef.current,
-        activeRoomId: activeCallRef.current?.roomId,
-        incomingRoomId: incomingCallRef.current?.roomId,
-        ...meta,
-      });
+    (_event: string, _meta?: Record<string, unknown>) => {
+      // Disable verbose call debug logs in production/dev console.
+      void _event;
+      void _meta;
     },
-    [isCallDebugEnabled],
+    [],
   );
-
-  useEffect(() => {
-    phaseRef.current = phase;
-  }, [phase]);
 
   useEffect(() => {
     activeCallRef.current = activeCall;
@@ -374,7 +390,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   }, [startedAt]);
 
   const cleanupRoom = useCallback(
-    (source = "unknown", meta?: CallDebugMeta) => {
+    (source = "unknown", meta?: Record<string, unknown>) => {
       const room = roomRef.current;
       hasLivekitConnectedRef.current = false;
       if (remoteEmptyTimeoutRef.current !== null) {
@@ -474,6 +490,8 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetCallState = useCallback(() => {
+    incomingCallRef.current = null;
+    activeCallRef.current = null;
     setPhase("idle");
     setIncomingCall(null);
     setActiveCall(null);
@@ -482,7 +500,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const leaveRoomAndReset = useCallback(
-    (source = "unknown", meta?: CallDebugMeta) => {
+    (source = "unknown", meta?: Record<string, unknown>) => {
       callDebug("leaveRoomAndReset", {
         source,
         ...meta,
@@ -967,6 +985,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
 
     try {
       isAcceptingIncomingCallRef.current = true;
+      incomingCallRef.current = null;
       setIncomingCall(null);
       setPhase("connecting");
       setActiveCall(call);
@@ -996,6 +1015,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       if (!callData) return;
 
       try {
+        incomingCallRef.current = null;
         emitSignal("reject-call", {
           toUserId: callData.callerId,
           roomId: callData.roomId,
@@ -1073,6 +1093,43 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       });
   }, [isCameraOff, syncLocalStreamFromRoom]);
 
+  const hydrateIncomingCallerAvatar = useCallback(
+    async (call: IncomingCallData) => {
+      if (!call.callerId || call.callerAvatar) return;
+
+      try {
+        let caller = await userService.getUserProfile(call.callerId);
+
+        // Fallback cho trường hợp endpoint profile không trả avatar theo context.
+        if (
+          !toAvatarValue((caller as unknown as Record<string, unknown>).avatar)
+        ) {
+          caller = await userService.getFriendProfile(call.callerId);
+        }
+
+        const avatarKey =
+          toAvatarValue(
+            (caller as unknown as Record<string, unknown>).avatar,
+          ) || toAvatarValue(caller as unknown as Record<string, unknown>);
+
+        if (!avatarKey) return;
+
+        setIncomingCall((prev) => {
+          if (!prev || prev.roomId !== call.roomId) return prev;
+          const next = { ...prev, callerAvatar: avatarKey };
+          incomingCallRef.current = next;
+          return next;
+        });
+      } catch (error) {
+        console.error(
+          "hydrateIncomingCallerAvatar error:",
+          getErrorMessage(error, "Không lấy được avatar người gọi"),
+        );
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     if (!socket.current || !isConnected) return;
     const socketInstance = socket.current;
@@ -1082,13 +1139,26 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       const call = parseIncomingCall(payload);
       if (!call || call.callerId === myUserId) return;
 
+      const currentIncoming = incomingCallRef.current;
+      const currentActive = activeCallRef.current;
+
       callDebug("socket:incoming-call", {
         roomId: call.roomId,
         callerId: call.callerId,
         conversationId: call.conversationId,
       });
 
-      if (activeCallRef.current || incomingCallRef.current) {
+      if (
+        currentIncoming?.roomId === call.roomId ||
+        currentActive?.roomId === call.roomId
+      ) {
+        callDebug("socket:incoming-call:duplicate_ignored", {
+          roomId: call.roomId,
+        });
+        return;
+      }
+
+      if (currentActive || currentIncoming) {
         callDebug("socket:incoming-call:auto_reject_busy", {
           roomId: call.roomId,
         });
@@ -1102,9 +1172,10 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
         return;
       }
 
+      incomingCallRef.current = call;
       setIncomingCall(call);
       setPhase("ringing");
-      toast.info(`${call.callerName || "Người dùng"} đang gọi cho bạn`);
+      void hydrateIncomingCallerAvatar(call);
     };
 
     const onCallAccepted = async (rawPayload: unknown) => {
@@ -1256,6 +1327,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
     leaveRoomAndReset,
     myUserId,
     socket,
+    hydrateIncomingCallerAvatar,
   ]);
 
   useEffect(() => {
@@ -1315,30 +1387,62 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
           }
         }}
       >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Cuộc gọi đến</DialogTitle>
-            <DialogDescription>
-              {incomingCall?.callerName || "Người dùng"} đang gọi (
-              {incomingCall?.callType === "video" ? "video" : "thoại"})
+        <DialogContent className="left-1/2 top-auto bottom-0 w-full max-w-none -translate-x-1/2 translate-y-0 rounded-t-3xl rounded-b-none border-0 bg-white pb-10 pt-6 shadow-2xl md:top-1/2 md:bottom-auto md:w-[420px] md:max-w-[92vw] md:-translate-y-1/2 md:rounded-3xl md:px-8 md:pb-8 md:pt-7 [&>button]:hidden">
+          <DialogHeader className="items-center text-center">
+            <div className="relative mb-3 h-24 w-24 overflow-hidden rounded-full border-4 border-slate-100 bg-slate-200 shadow-md md:mb-4 md:h-28 md:w-28">
+              {incomingCall?.callerAvatar ? (
+                <PresignedAvatar
+                  avatarKey={incomingCall.callerAvatar}
+                  displayName={incomingCall?.callerName || "Người dùng"}
+                  className="h-24 w-24 md:h-28 md:w-28"
+                  fallbackClassName="text-2xl bg-slate-300 text-slate-700"
+                />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-2xl font-semibold text-slate-600">
+                  {(incomingCall?.callerName || "N")
+                    .trim()
+                    .charAt(0)
+                    .toUpperCase()}
+                </div>
+              )}
+            </div>
+            <DialogTitle className="text-2xl font-bold text-slate-900">
+              {incomingCall?.callerName || "Người dùng"}
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-base text-slate-500 md:text-[15px]">
+              Cuộc gọi {incomingCall?.callType === "video" ? "video" : "thoại"}{" "}
+              đến
             </DialogDescription>
           </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button
-              variant="outline"
+          <DialogFooter className="mt-6 flex-row items-end justify-center gap-12 sm:justify-center sm:space-x-0 md:mt-7 md:gap-14">
+            <button
+              type="button"
               onClick={() => {
                 void rejectIncomingCall("declined");
               }}
+              className="flex flex-col items-center gap-2"
             >
-              <PhoneOff className="w-4 h-4" /> Từ chối
-            </Button>
-            <Button
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-rose-500 text-white shadow-lg shadow-rose-200">
+                <PhoneOff className="h-6 w-6" />
+              </span>
+              <span className="text-sm font-medium text-slate-600 md:text-[15px]">
+                Từ chối
+              </span>
+            </button>
+            <button
+              type="button"
               onClick={() => {
                 void acceptIncomingCall();
               }}
+              className="flex flex-col items-center gap-2"
             >
-              <Phone className="w-4 h-4" /> Chấp nhận
-            </Button>
+              <span className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-200">
+                <Phone className="h-6 w-6" />
+              </span>
+              <span className="text-sm font-medium text-slate-600 md:text-[15px]">
+                Chấp nhận
+              </span>
+            </button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

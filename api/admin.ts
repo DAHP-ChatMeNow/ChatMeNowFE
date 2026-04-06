@@ -117,32 +117,278 @@ export interface AdminPost {
 }
 
 export interface AdminPostsResponse {
+  success?: boolean;
   posts: AdminPost[];
   total: number;
   page: number;
   totalPages: number;
 }
 
-const getPosts = async (page = 1, limit = 20, status = "") => {
-  const { data } = await api.get<AdminPostsResponse>("/admin/posts", {
-    params: { page, limit, ...(status ? { status } : {}) },
+interface BackendAdminPostAuthor {
+  _id?: string;
+  id?: string;
+  displayName?: string;
+  email?: string;
+  avatar?: string;
+}
+
+interface BackendAdminPost extends Omit<AdminPost, "author" | "id"> {
+  id?: string;
+  author?: BackendAdminPostAuthor;
+  authorId?: BackendAdminPostAuthor | string;
+}
+
+interface BackendAdminPostsResponse {
+  success?: boolean;
+  posts: BackendAdminPost[];
+  total: number;
+  page: number;
+  totalPages: number;
+}
+
+const normalizeAdminPost = (post: BackendAdminPost): AdminPost => {
+  const sourceAuthor =
+    (post.author && typeof post.author === "object"
+      ? post.author
+      : undefined) ||
+    (typeof post.authorId === "object" && post.authorId
+      ? post.authorId
+      : undefined);
+
+  const authorId = sourceAuthor?._id || sourceAuthor?.id || "";
+
+  return {
+    ...post,
+    id: post.id || post._id,
+    author: {
+      _id: authorId,
+      displayName: sourceAuthor?.displayName || "Unknown user",
+      email: sourceAuthor?.email || "",
+      avatar: sourceAuthor?.avatar,
+    },
+  };
+};
+
+export interface AdminPostDetailResponse {
+  success?: boolean;
+  post: AdminPost;
+}
+
+export interface AdminPostStatsTopPost {
+  _id: string;
+  id?: string;
+  content?: string;
+  likesCount?: number;
+  commentsCount?: number;
+  privacy?: string;
+  createdAt?: string;
+  author?: {
+    _id?: string;
+    displayName?: string;
+    avatar?: string;
+  };
+  authorId?: {
+    _id?: string;
+    displayName?: string;
+    avatar?: string;
+  };
+}
+
+export interface AdminPostsStatsResponse {
+  success?: boolean;
+  stats?: Partial<Omit<AdminPostsStatsResponse, "stats">>;
+  rangeDays: number;
+  totalPosts: number;
+  postsInRange: number;
+  totalLikes: number;
+  totalComments: number;
+  avgLikesPerPost: number;
+  avgCommentsPerPost: number;
+  privacyStats?: {
+    public?: number;
+    friends?: number;
+    private?: number;
+  };
+  postsPerDay?: Array<{
+    date: string;
+    count: number;
+  }>;
+  topPosts?: AdminPostStatsTopPost[];
+}
+
+export interface AdminPostLikeUser {
+  _id: string;
+  displayName: string;
+  avatar?: string;
+  isOnline?: boolean;
+  lastSeen?: string;
+}
+
+export interface AdminPostLikesResponse {
+  success: boolean;
+  users: AdminPostLikeUser[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export interface AdminPostComment {
+  _id: string;
+  postId: string;
+  userId?: {
+    _id: string;
+    displayName: string;
+    avatar?: string;
+  };
+  authorSource?: "user" | "ai";
+  content: string;
+  createdAt: string;
+}
+
+export interface AdminPostCommentsResponse {
+  success: boolean;
+  comments: AdminPostComment[];
+  total: number;
+  page: number;
+  limit: number;
+}
+
+export type AdminPostPrivacy = "public" | "friends" | "private";
+export type AdminPostSortBy = "createdAt" | "likesCount" | "commentsCount";
+export type AdminPostSortOrder = "asc" | "desc";
+
+export interface AdminPostsQueryParams {
+  page?: number;
+  limit?: number;
+  q?: string;
+  privacy?: AdminPostPrivacy | "";
+  authorId?: string;
+  sortBy?: AdminPostSortBy;
+  sortOrder?: AdminPostSortOrder;
+}
+
+export interface AdminPostInteractionsQueryParams {
+  page?: number;
+  limit?: number;
+  authorSource?: "user" | "ai";
+}
+
+const getPosts = async ({
+  page = 1,
+  limit = 20,
+  q = "",
+  privacy = "",
+  authorId = "",
+  sortBy = "createdAt",
+  sortOrder = "desc",
+}: AdminPostsQueryParams = {}) => {
+  const { data } = await api.get<BackendAdminPostsResponse>(
+    "/posts/admin/all",
+    {
+      params: {
+        page,
+        limit,
+        ...(q ? { q } : {}),
+        ...(privacy ? { privacy } : {}),
+        ...(authorId ? { authorId } : {}),
+        sortBy,
+        sortOrder,
+      },
+    },
+  );
+
+  return {
+    ...data,
+    posts: (data.posts || []).map(normalizeAdminPost),
+  } satisfies AdminPostsResponse;
+};
+
+const getPostDetail = async (postId: string) => {
+  const { data } = await api.get<{ success?: boolean; post: BackendAdminPost }>(
+    `/posts/admin/${postId}`,
+  );
+  return {
+    ...data,
+    post: normalizeAdminPost(data.post),
+  } satisfies AdminPostDetailResponse;
+};
+
+const getPostLikes = async (
+  postId: string,
+  {
+    page = 1,
+    limit = 20,
+  }: Omit<AdminPostInteractionsQueryParams, "authorSource"> = {},
+) => {
+  const { data } = await api.get<AdminPostLikesResponse>(
+    `/posts/admin/${postId}/likes`,
+    {
+      params: { page, limit },
+    },
+  );
+  return data;
+};
+
+const getPostComments = async (
+  postId: string,
+  { page = 1, limit = 20, authorSource }: AdminPostInteractionsQueryParams = {},
+) => {
+  const { data } = await api.get<AdminPostCommentsResponse>(
+    `/posts/admin/${postId}/comments`,
+    {
+      params: {
+        page,
+        limit,
+        ...(authorSource ? { authorSource } : {}),
+      },
+    },
+  );
+  return data;
+};
+
+const updatePostPrivacy = async (postId: string, privacy: AdminPostPrivacy) => {
+  const { data } = await api.patch(`/posts/admin/${postId}/privacy`, {
+    privacy,
   });
   return data;
 };
 
-const approvePost = async (postId: string) => {
-  const { data } = await api.patch(`/admin/posts/${postId}/approve`);
-  return data;
-};
-
-const rejectPost = async (postId: string, reason?: string) => {
-  const { data } = await api.patch(`/admin/posts/${postId}/reject`, { reason });
-  return data;
-};
-
 const deletePost = async (postId: string) => {
-  const { data } = await api.delete(`/admin/posts/${postId}`);
+  const { data } = await api.delete(`/posts/admin/${postId}`);
   return data;
+};
+
+const getPostStats = async (days: number = 30) => {
+  const safeDays = Math.min(365, Math.max(1, Number(days) || 30));
+  const { data } = await api.get<AdminPostsStatsResponse>(
+    "/posts/admin/stats",
+    {
+      params: { days: safeDays },
+    },
+  );
+
+  const stats = data?.stats || {};
+  return {
+    success: data?.success,
+    rangeDays:
+      Number(stats.rangeDays ?? data?.rangeDays ?? safeDays) || safeDays,
+    totalPosts: Number(stats.totalPosts ?? data?.totalPosts ?? 0) || 0,
+    postsInRange: Number(stats.postsInRange ?? data?.postsInRange ?? 0) || 0,
+    totalLikes: Number(stats.totalLikes ?? data?.totalLikes ?? 0) || 0,
+    totalComments: Number(stats.totalComments ?? data?.totalComments ?? 0) || 0,
+    avgLikesPerPost:
+      Number(stats.avgLikesPerPost ?? data?.avgLikesPerPost ?? 0) || 0,
+    avgCommentsPerPost:
+      Number(stats.avgCommentsPerPost ?? data?.avgCommentsPerPost ?? 0) || 0,
+    privacyStats: stats.privacyStats ??
+      data?.privacyStats ?? {
+        public: 0,
+        friends: 0,
+        private: 0,
+      },
+    postsPerDay: stats.postsPerDay ?? data?.postsPerDay ?? [],
+    topPosts: stats.topPosts ?? data?.topPosts ?? [],
+  } satisfies AdminPostsStatsResponse;
 };
 
 // ===================== Stats =====================
@@ -165,8 +411,11 @@ export const adminService = {
   toggleUserActive,
   updateUserAccountStatus,
   getPosts,
-  approvePost,
-  rejectPost,
+  getPostDetail,
+  getPostLikes,
+  getPostComments,
+  updatePostPrivacy,
   deletePost,
+  getPostStats,
   getStats,
 };

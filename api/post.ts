@@ -2,6 +2,7 @@ import api from "@/lib/axios";
 import { Post } from "@/types/post";
 import { Comment } from "@/types/comment";
 import { User } from "@/types/user";
+import { userService } from "@/api/user";
 
 export type CreatePostPayload = {
   content: string;
@@ -24,6 +25,65 @@ interface BackendPost {
   createdAt: Date;
   updatedAt?: Date;
 }
+
+const isSignedS3ViewUrl = (value?: string): boolean => {
+  if (!value || !/^https?:\/\//i.test(value)) return false;
+
+  try {
+    const parsed = new URL(value);
+    return parsed.searchParams.has("X-Amz-Algorithm");
+  } catch {
+    return false;
+  }
+};
+
+const extractS3ObjectKey = (value?: string): string | null => {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+
+  try {
+    const parsed = new URL(value);
+    const rawPath = decodeURIComponent(parsed.pathname || "").replace(
+      /^\/+/,
+      "",
+    );
+    return rawPath || null;
+  } catch {
+    return null;
+  }
+};
+
+const refreshPostMediaUrls = async (
+  media?: Array<{ url: string; type: string; duration?: number }>,
+) => {
+  if (!media?.length) return media;
+
+  const cache = new Map<string, string>();
+
+  return Promise.all(
+    media.map(async (item) => {
+      if (!isSignedS3ViewUrl(item.url)) return item;
+
+      const key = extractS3ObjectKey(item.url);
+      if (!key) return item;
+
+      if (cache.has(key)) {
+        return { ...item, url: cache.get(key)! };
+      }
+
+      try {
+        const presigned = await userService.getPresignedUrl(key);
+        if (presigned?.viewUrl) {
+          cache.set(key, presigned.viewUrl);
+          return { ...item, url: presigned.viewUrl };
+        }
+      } catch {
+        // Keep original URL when refresh fails to avoid breaking render.
+      }
+
+      return item;
+    }),
+  );
+};
 
 interface BackendComment {
   _id: string;
@@ -212,22 +272,24 @@ const getFeed = async ({ pageParam = 1 }: { pageParam?: number }) => {
     },
   });
 
-  const posts: Post[] = data.posts.map((post) => ({
-    id: post._id,
-    _id: post._id,
-    // authorId is populated from backend, so it's an object
-    authorId: (post.authorId as any)?._id || post.authorId,
-    author: post.authorId as User,
-    content: post.content,
-    privacy: post.privacy,
-    media: post.media,
-    likesCount: post.likesCount || 0,
-    commentsCount: post.commentsCount || 0,
-    trendingScore: post.trendingScore || 0,
-    isLikedByCurrentUser: post.isLikedByCurrentUser || false,
-    createdAt: post.createdAt,
-    updatedAt: post.updatedAt,
-  }));
+  const posts: Post[] = await Promise.all(
+    data.posts.map(async (post) => ({
+      id: post._id,
+      _id: post._id,
+      // authorId is populated from backend, so it's an object
+      authorId: (post.authorId as any)?._id || post.authorId,
+      author: post.authorId as User,
+      content: post.content,
+      privacy: post.privacy,
+      media: await refreshPostMediaUrls(post.media),
+      likesCount: post.likesCount || 0,
+      commentsCount: post.commentsCount || 0,
+      trendingScore: post.trendingScore || 0,
+      isLikedByCurrentUser: post.isLikedByCurrentUser || false,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+    })),
+  );
 
   return {
     posts,
@@ -384,21 +446,23 @@ const getMyPosts = async ({ pageParam = 1 }: { pageParam?: number }) => {
     limit: number;
   }>("/posts/me", { params: { page: pageParam, limit: 12 } });
 
-  const posts: Post[] = data.posts.map((post) => ({
-    id: post._id,
-    _id: post._id,
-    authorId: (post.authorId as any)?._id || post.authorId,
-    author: post.authorId as User,
-    content: post.content,
-    privacy: post.privacy,
-    media: post.media,
-    likesCount: post.likesCount || 0,
-    commentsCount: post.commentsCount || 0,
-    trendingScore: post.trendingScore || 0,
-    isLikedByCurrentUser: post.isLikedByCurrentUser || false,
-    createdAt: post.createdAt,
-    updatedAt: post.updatedAt,
-  }));
+  const posts: Post[] = await Promise.all(
+    data.posts.map(async (post) => ({
+      id: post._id,
+      _id: post._id,
+      authorId: (post.authorId as any)?._id || post.authorId,
+      author: post.authorId as User,
+      content: post.content,
+      privacy: post.privacy,
+      media: await refreshPostMediaUrls(post.media),
+      likesCount: post.likesCount || 0,
+      commentsCount: post.commentsCount || 0,
+      trendingScore: post.trendingScore || 0,
+      isLikedByCurrentUser: post.isLikedByCurrentUser || false,
+      createdAt: post.createdAt,
+      updatedAt: post.updatedAt,
+    })),
+  );
 
   return {
     posts,

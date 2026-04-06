@@ -1,7 +1,17 @@
 "use client";
 
 import { Fragment, useRef, useEffect, useState, useCallback } from "react";
-import { MoreHorizontal, PhoneCall, PhoneMissed, PhoneOff } from "lucide-react";
+import {
+  FileAudio2,
+  MoreVertical,
+  Pause,
+  Paperclip,
+  Play,
+  PhoneCall,
+  PhoneMissed,
+  PhoneOff,
+} from "lucide-react";
+import Image from "next/image";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   DropdownMenu,
@@ -27,9 +37,12 @@ import { MessageSkeleton } from "@/components/skeletons/message-skeleton";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useSocket } from "@/components/providers/socket-provider";
 import { Message } from "@/types/message";
+import { MessageAttachment } from "@/types/message";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import { useQueryClient } from "@tanstack/react-query";
 import { chatService, MessagesResponse } from "@/api/chat";
+import { usePresignedUrl } from "@/hooks/use-profile";
+import { toast } from "sonner";
 
 type ChatBackgroundKey = "default" | "sky" | "sunset" | "mint" | "night";
 
@@ -142,6 +155,256 @@ const renderMessageContent = (content?: string) => {
   ));
 };
 
+const isDirectMediaUrl = (value?: string) => {
+  if (!value) return false;
+  return /^(https?:\/\/|data:|blob:|\/)\S+/i.test(value);
+};
+
+const attachmentKeyOrUrl = (attachment: MessageAttachment) => {
+  if (attachment.key) return attachment.key;
+  if (!attachment.url) return "";
+  return attachment.url;
+};
+
+const WAVEFORM_BARS = [5, 10, 7, 13, 9, 15, 8, 12, 6, 11, 7, 14, 9, 10];
+const AUDIO_WAVE_SCALE = 0.72;
+
+const formatAudioDuration = (seconds: number) => {
+  const safeSeconds = Number.isFinite(seconds) ? Math.max(0, seconds) : 0;
+  const mins = Math.floor(safeSeconds / 60);
+  const secs = Math.floor(safeSeconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+};
+
+function AudioMessageBubble({ src, isMe }: { src: string; isMe: boolean }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    const onLoaded = () => {
+      if (Number.isFinite(audio.duration)) {
+        setDuration(audio.duration);
+      }
+    };
+
+    const onTimeUpdate = () => {
+      setCurrentTime(audio.currentTime);
+    };
+
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+    };
+
+    audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("timeupdate", onTimeUpdate);
+    audio.addEventListener("ended", onEnded);
+
+    return () => {
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("timeupdate", onTimeUpdate);
+      audio.removeEventListener("ended", onEnded);
+    };
+  }, []);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    return () => {
+      if (audio) {
+        audio.pause();
+      }
+    };
+  }, []);
+
+  const togglePlay = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (isPlaying) {
+      audio.pause();
+      setIsPlaying(false);
+      return;
+    }
+
+    try {
+      await audio.play();
+      setIsPlaying(true);
+    } catch {
+      setIsPlaying(false);
+    }
+  };
+
+  const progressRatio = duration > 0 ? currentTime / duration : 0;
+  const activeBars = Math.round(progressRatio * WAVEFORM_BARS.length);
+  const bubbleWidth = Math.min(300, Math.max(170, 130 + duration * 4));
+
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-2xl px-2.5 py-1.5 ${
+        isMe ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700"
+      }`}
+      style={{ width: `${bubbleWidth}px` }}
+    >
+      <button
+        type="button"
+        onClick={togglePlay}
+        aria-label={isPlaying ? "Tạm dừng ghi âm" : "Phát ghi âm"}
+        className={`inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition-colors ${
+          isMe
+            ? "bg-white/20 hover:bg-white/30"
+            : "bg-slate-200 hover:bg-slate-300"
+        }`}
+      >
+        {isPlaying ? (
+          <Pause className="h-3 w-3" />
+        ) : (
+          <Play className="h-3 w-3" />
+        )}
+      </button>
+
+      <div className="flex min-w-0 flex-1 items-end gap-0.5 h-4">
+        {WAVEFORM_BARS.map((height, index) => {
+          const isActive = index < activeBars;
+          return (
+            <span
+              key={`wave-${index}`}
+              className={`w-1 rounded-full transition-colors ${
+                isMe
+                  ? isActive
+                    ? "bg-white"
+                    : "bg-white/45"
+                  : isActive
+                    ? "bg-blue-500"
+                    : "bg-slate-400"
+              }`}
+              style={{
+                height: `${Math.max(3, Math.round(height * AUDIO_WAVE_SCALE))}px`,
+              }}
+            />
+          );
+        })}
+      </div>
+
+      <span
+        className={`shrink-0 text-[10px] font-medium ${
+          isMe ? "text-blue-100" : "text-slate-500"
+        }`}
+      >
+        {formatAudioDuration(duration || currentTime)}
+      </span>
+
+      <audio ref={audioRef} src={src} preload="metadata" className="hidden" />
+    </div>
+  );
+}
+
+function MessageAttachmentItem({
+  attachment,
+  isMe,
+}: {
+  attachment: MessageAttachment;
+  isMe: boolean;
+}) {
+  const rawKeyOrUrl = attachmentKeyOrUrl(attachment);
+  const direct = isDirectMediaUrl(rawKeyOrUrl);
+  const { data: presigned } = usePresignedUrl(
+    rawKeyOrUrl,
+    Boolean(rawKeyOrUrl) && !direct,
+  );
+
+  const resolvedUrl = direct ? rawKeyOrUrl : (presigned?.viewUrl ?? "");
+  const type = String(attachment.fileType || "").toLowerCase();
+  const fileName = String(attachment.fileName || "").toLowerCase();
+  const urlValue = String(resolvedUrl || "").toLowerCase();
+  const isImageType =
+    type === "image" ||
+    type.startsWith("image/") ||
+    /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(fileName) ||
+    /\.(png|jpe?g|gif|webp|bmp|svg)(\?|#|$)/i.test(urlValue);
+  const isAudioType =
+    type === "audio" ||
+    type.startsWith("audio/") ||
+    /\.(mp3|wav|ogg|m4a|aac|webm)(\?|#|$)/i.test(fileName) ||
+    /\.(mp3|wav|ogg|m4a|aac|webm)(\?|#|$)/i.test(urlValue);
+  const isVideoType =
+    type === "video" ||
+    type.startsWith("video/") ||
+    /\.(mp4|mov|avi|mkv|webm|m4v)(\?|#|$)/i.test(fileName) ||
+    /\.(mp4|mov|avi|mkv|webm|m4v)(\?|#|$)/i.test(urlValue);
+
+  if (!resolvedUrl) {
+    return (
+      <div
+        className={`rounded-xl px-3 py-2 text-xs ${
+          isMe ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-500"
+        }`}
+      >
+        Đang tải tệp...
+      </div>
+    );
+  }
+
+  if (isImageType) {
+    return (
+      <a href={resolvedUrl} target="_blank" rel="noreferrer" className="block">
+        <Image
+          src={resolvedUrl}
+          alt={attachment.fileName || "image"}
+          width={320}
+          height={200}
+          unoptimized
+          className="h-auto w-full max-w-[260px] rounded-xl object-cover"
+        />
+      </a>
+    );
+  }
+
+  if (isAudioType) {
+    return <AudioMessageBubble src={resolvedUrl} isMe={isMe} />;
+  }
+
+  if (isVideoType) {
+    return (
+      <video
+        controls
+        src={resolvedUrl}
+        className="h-auto w-full max-w-[260px] rounded-xl"
+      />
+    );
+  }
+
+  return (
+    <a
+      href={resolvedUrl}
+      target="_blank"
+      rel="noreferrer"
+      className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${
+        isMe
+          ? "border-blue-600 bg-blue-600 text-white shadow-sm"
+          : "border-slate-200 bg-slate-50 text-slate-700"
+      }`}
+    >
+      <Paperclip className="h-4 w-4" />
+      <span className="max-w-[190px] truncate">
+        {attachment.fileName || "Tệp đính kèm"}
+      </span>
+    </a>
+  );
+}
+
+const resolveTypeFromFile = (file: File): string => {
+  const mime = file.type || "";
+  if (mime.startsWith("image/")) return "image";
+  if (mime.startsWith("audio/")) return "audio";
+  if (mime.startsWith("video/")) return "video";
+  return "file";
+};
+
 const getSystemCallDescription = (msg: Message, status: string) => {
   if (status === "missed") return "Không được trả lời";
   if (status === "rejected") return "Cuộc gọi đã bị từ chối";
@@ -214,8 +477,9 @@ export default function ChatDetailClient() {
     statusText,
   } = useConversationDisplay(conversation, currentUserId);
 
-  const { mutate: sendMessage, isPending: isSendingMessage } = useSendMessage();
-  const { mutate: sendAiMessage, isPending: isSendingAiMessage } =
+  const { mutateAsync: sendMessage, isPending: isSendingMessage } =
+    useSendMessage();
+  const { mutateAsync: sendAiMessage, isPending: isSendingAiMessage } =
     useSendAiMessage();
   const { mutate: unsendMessage, isPending: isUnsendPending } =
     useUnsendMessage();
@@ -225,6 +489,9 @@ export default function ChatDetailClient() {
   const queryClient = useQueryClient();
   const { socket, isConnected } = useSocket();
   const scrollRef = useRef<HTMLDivElement>(null);
+  const longPressTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
   const shouldAutoScrollRef = useRef(true);
   const hasInitializedScrollRef = useRef(false);
   const beforeIdRef = useRef<string | null>(null);
@@ -233,6 +500,12 @@ export default function ChatDetailClient() {
   const isMountedRef = useRef(true);
   const [typingUsers, setTypingUsers] = useState<string[]>([]);
   const [isLoadingOlder, setIsLoadingOlder] = useState(false);
+  const [isSendingAttachment, setIsSendingAttachment] = useState(false);
+  const [uploadProgressPercent, setUploadProgressPercent] = useState(0);
+  const [uploadProgressLabel, setUploadProgressLabel] = useState("");
+  const [activeMessageActionsId, setActiveMessageActionsId] = useState<
+    string | null
+  >(null);
   const [backgroundKey, setBackgroundKey] =
     useState<ChatBackgroundKey>("default");
 
@@ -526,23 +799,135 @@ export default function ChatDetailClient() {
     };
   }, [isConnected, conversationId, user, aiMode]);
 
-  const handleSendMessage = (text: string) => {
+  useEffect(() => {
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("[data-message-action-scope='true']")) {
+        return;
+      }
+
+      setActiveMessageActionsId(null);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+    };
+  }, []);
+
+  useEffect(() => {
+    setActiveMessageActionsId(null);
+  }, [conversationId]);
+
+  const clearLongPressTimer = useCallback(() => {
+    if (longPressTimeoutRef.current) {
+      clearTimeout(longPressTimeoutRef.current);
+      longPressTimeoutRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearLongPressTimer();
+    };
+  }, [clearLongPressTimer]);
+
+  const handleMessageTouchStart = useCallback(
+    (messageId?: string, canShowActions?: boolean) => {
+      clearLongPressTimer();
+      if (!messageId || !canShowActions) return;
+
+      longPressTimeoutRef.current = setTimeout(() => {
+        setActiveMessageActionsId(messageId);
+      }, 450);
+    },
+    [clearLongPressTimer],
+  );
+
+  const handleSendMessage = async (text: string) => {
     if (!text.trim()) return;
 
     if (aiMode) {
-      sendAiMessage({
+      await sendAiMessage({
         conversationId,
         content: text,
       });
       return;
     }
 
-    sendMessage({
+    await sendMessage({
       conversationId,
       content: text,
       type: "text",
     });
   };
+
+  const handleSendAttachments = useCallback(
+    async (files: File[]) => {
+      if (!files.length || !conversationId) return;
+
+      if (aiMode) {
+        toast.info("Đoạn chat AI hiện chỉ hỗ trợ tin nhắn văn bản");
+        return;
+      }
+
+      setIsSendingAttachment(true);
+      setUploadProgressPercent(0);
+      try {
+        for (let index = 0; index < files.length; index += 1) {
+          const file = files[index];
+          setUploadProgressLabel(
+            `Đang tải ${index + 1}/${files.length}: ${file.name}`,
+          );
+
+          const presign = await chatService.createChatUploadPresignPut({
+            fileName: file.name,
+            contentType: file.type || "application/octet-stream",
+            fileSize: file.size,
+          });
+
+          await chatService.uploadToPresignedUrl(
+            presign.uploadUrl,
+            file,
+            (fileProgress) => {
+              const overall = Math.round(
+                ((index + fileProgress / 100) / files.length) * 100,
+              );
+              setUploadProgressPercent(overall);
+            },
+          );
+
+          const fileType =
+            file.type || presign.contentType || "application/octet-stream";
+          const messageType = resolveTypeFromFile(file);
+
+          await sendMessage({
+            conversationId,
+            content: "",
+            type: messageType,
+            attachments: [
+              {
+                key: presign.key,
+                fileType,
+                fileName: file.name,
+                fileSize: file.size,
+              },
+            ],
+          });
+        }
+      } catch (error: unknown) {
+        toast.error(
+          (error as { response?: { data?: { message?: string } } })?.response
+            ?.data?.message || "Không thể gửi tệp đính kèm",
+        );
+      } finally {
+        setUploadProgressPercent(0);
+        setUploadProgressLabel("");
+        setIsSendingAttachment(false);
+      }
+    },
+    [aiMode, conversationId, sendMessage],
+  );
 
   const handleTyping = () => {
     if (aiMode) return;
@@ -698,11 +1083,40 @@ export default function ChatDetailClient() {
                   const messageTime = formatMessageClock(msg.createdAt);
                   const messageId = msg.id || msg._id;
                   const isTextMessage = msg.type === "text";
+                  const attachments = msg.attachments || [];
+                  const isAttachmentOnlyMessage =
+                    attachments.length > 0 &&
+                    !msg.content &&
+                    msg.type !== "audio";
+                  const isPlainAttachmentBubble =
+                    isMe && isAttachmentOnlyMessage;
                   const isUnsent = Boolean(msg.isUnsent || msg.unsentAt);
                   const canEdit =
                     isMe && isTextMessage && !isUnsent && !isAiMessage;
                   const canUnsend = isMe && !isUnsent && !isAiMessage;
                   const canDeleteForMe = isMe;
+                  const canShowActions =
+                    Boolean(messageId) &&
+                    (canEdit || canUnsend || canDeleteForMe);
+                  const isActionsVisible =
+                    canShowActions && activeMessageActionsId === messageId;
+                  const outgoingMetaClass = isPlainAttachmentBubble
+                    ? "text-slate-400"
+                    : "text-blue-100";
+                  const outgoingActionClass = isPlainAttachmentBubble
+                    ? "text-slate-500 hover:bg-slate-200/80 hover:text-slate-700"
+                    : "text-blue-100 hover:bg-blue-500/40 hover:text-white";
+                  const statusText =
+                    msg.status === "sending"
+                      ? "Đang gửi..."
+                      : msg.status === "failed"
+                        ? "Gửi thất bại"
+                        : messageTime;
+                  const noteText = isUnsent
+                    ? "Đã thu hồi"
+                    : msg.isEdited
+                      ? "Đã chỉnh sửa"
+                      : "";
 
                   const handleEditMessage = () => {
                     if (!messageId || !canEdit) return;
@@ -757,13 +1171,50 @@ export default function ChatDetailClient() {
                         />
                       )}
                       <div
-                        className={`px-4 py-2.5 rounded-2xl text-[14px] md:text-[15px] shadow-sm max-w-[84%] md:max-w-[70%] xl:max-w-[64%] ${
-                          isMe
-                            ? "bg-blue-600 text-white rounded-br-none"
-                            : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
+                        data-message-action-scope={isMe ? "true" : undefined}
+                        onTouchStart={() => {
+                          if (!isMe) return;
+                          handleMessageTouchStart(messageId, canShowActions);
+                        }}
+                        onTouchEnd={clearLongPressTimer}
+                        onTouchCancel={clearLongPressTimer}
+                        onTouchMove={clearLongPressTimer}
+                        className={`group rounded-2xl text-[14px] md:text-[15px] max-w-[84%] md:max-w-[70%] xl:max-w-[64%] ${
+                          isPlainAttachmentBubble
+                            ? "w-fit p-0 bg-transparent text-slate-800 shadow-none"
+                            : `px-4 py-2.5 shadow-sm ${
+                                isMe
+                                  ? "bg-blue-600 text-white rounded-br-none"
+                                  : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
+                              }`
                         }`}
                       >
-                        {renderMessageContent(msg.content)}
+                        {attachments.length > 0 && (
+                          <div className={msg.content ? "mb-2" : ""}>
+                            <div className="flex flex-col gap-2">
+                              {attachments.map((attachment, index) => (
+                                <MessageAttachmentItem
+                                  key={`${attachment.key || attachment.url || attachment.fileName}-${index}`}
+                                  attachment={attachment}
+                                  isMe={isMe}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {msg.content ? renderMessageContent(msg.content) : null}
+                        {msg.type === "audio" && attachments.length === 0 && (
+                          <div
+                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                              isMe
+                                ? "bg-blue-500/40 text-blue-50"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            <FileAudio2 className="h-4 w-4" />
+                            Tin nhắn ghi âm
+                          </div>
+                        )}
                         {isAiMessage && !isMe && (
                           <div className="mt-1.5 flex justify-start">
                             <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
@@ -771,74 +1222,99 @@ export default function ChatDetailClient() {
                             </span>
                           </div>
                         )}
-                        {(msg.status === "sending" ||
-                          msg.status === "failed" ||
-                          messageTime) && (
+                        {!isMe && statusText && (
                           <div
                             className={`text-[10px] mt-1 text-right ${
                               isMe ? "text-blue-100" : "text-slate-400"
                             }`}
                             suppressHydrationWarning
                           >
-                            {msg.status === "sending"
-                              ? "Đang gửi..."
-                              : msg.status === "failed"
-                                ? "Gửi thất bại"
-                                : messageTime}
+                            {statusText}
                           </div>
                         )}
 
-                        {(msg.isEdited || isUnsent) && (
+                        {!isMe && noteText && (
                           <div
                             className={`mt-1 text-[10px] ${
                               isMe ? "text-blue-100" : "text-slate-400"
                             }`}
                           >
-                            {isUnsent
-                              ? "Đã thu hồi"
-                              : msg.isEdited
-                                ? "Đã chỉnh sửa"
-                                : ""}
+                            {noteText}
                           </div>
                         )}
 
-                        {isMe && (canEdit || canUnsend || canDeleteForMe) && (
-                          <div className="mt-1.5 flex justify-end">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <button
-                                  type="button"
-                                  aria-label="Mở tùy chọn tin nhắn"
-                                  className="inline-flex items-center justify-center rounded-full p-1 text-blue-100 hover:bg-blue-500/40 hover:text-white"
-                                  disabled={
-                                    isEditPending ||
-                                    isUnsendPending ||
-                                    isDeletePending
-                                  }
-                                >
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end" className="w-40">
-                                {canEdit && (
-                                  <DropdownMenuItem onClick={handleEditMessage}>
-                                    Sửa tin nhắn
-                                  </DropdownMenuItem>
-                                )}
-                                {canUnsend && (
-                                  <DropdownMenuItem
-                                    onClick={handleUnsendMessage}
+                        {isMe && (statusText || noteText || canDeleteForMe) && (
+                          <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                            {noteText && (
+                              <span
+                                className={`text-[10px] ${outgoingMetaClass}`}
+                              >
+                                {noteText}
+                              </span>
+                            )}
+                            {statusText && (
+                              <span
+                                className={`text-[10px] ${outgoingMetaClass}`}
+                                suppressHydrationWarning
+                              >
+                                {statusText}
+                              </span>
+                            )}
+
+                            {canShowActions && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="Mở tùy chọn tin nhắn"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      if (messageId) {
+                                        setActiveMessageActionsId(messageId);
+                                      }
+                                    }}
+                                    className={`inline-flex items-center justify-center rounded-full p-1 transition-all duration-150 ${outgoingActionClass} ${
+                                      isActionsVisible
+                                        ? "opacity-100 pointer-events-auto"
+                                        : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                                    }`}
+                                    disabled={
+                                      isEditPending ||
+                                      isUnsendPending ||
+                                      isDeletePending
+                                    }
                                   >
-                                    Thu hồi tin nhắn
-                                  </DropdownMenuItem>
-                                )}
-                                {canDeleteForMe && (
-                                  <DropdownMenuItem onClick={handleDeleteForMe}>
-                                    Xóa phía tôi
-                                  </DropdownMenuItem>
-                                )}
-                              </DropdownMenuContent>
-                            </DropdownMenu>
+                                    <MoreVertical className="h-4 w-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="w-40"
+                                >
+                                  {canEdit && (
+                                    <DropdownMenuItem
+                                      onClick={handleEditMessage}
+                                    >
+                                      Sửa tin nhắn
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canUnsend && (
+                                    <DropdownMenuItem
+                                      onClick={handleUnsendMessage}
+                                    >
+                                      Thu hồi tin nhắn
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canDeleteForMe && (
+                                    <DropdownMenuItem
+                                      onClick={handleDeleteForMe}
+                                    >
+                                      Xóa phía tôi
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
                           </div>
                         )}
                       </div>
@@ -872,7 +1348,16 @@ export default function ChatDetailClient() {
 
       <ChatInput
         onSend={handleSendMessage}
-        disabled={!conversationId || isSendingMessage || isSendingAiMessage}
+        onSendAttachments={handleSendAttachments}
+        isUploadingAttachments={isSendingAttachment}
+        uploadProgressPercent={uploadProgressPercent}
+        uploadProgressLabel={uploadProgressLabel}
+        disabled={
+          !conversationId ||
+          isSendingMessage ||
+          isSendingAiMessage ||
+          isSendingAttachment
+        }
         onTyping={handleTyping}
         onStopTyping={handleStopTyping}
       />

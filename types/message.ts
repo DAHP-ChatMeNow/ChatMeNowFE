@@ -1,5 +1,6 @@
 export interface MessageAttachment {
-  url: string;
+  key?: string;
+  url?: string;
   fileType: string;
   fileName: string;
   fileSize: number;
