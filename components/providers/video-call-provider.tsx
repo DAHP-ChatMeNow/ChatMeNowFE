@@ -236,7 +236,7 @@ const parseIncomingCall = (
     callerName:
       (payload.callerName as string | undefined) ||
       (caller.displayName as string | undefined) ||
-      "User",
+      "Người dùng",
     callerAvatar:
       (payload.callerAvatar as string | undefined) ||
       (caller.avatar as string | undefined) ||
@@ -322,6 +322,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   const isAcceptingIncomingCallRef = useRef(false);
   const connectingRoomIdRef = useRef<string | null>(null);
   const hasLivekitConnectedRef = useRef(false);
+  const stopRingtoneRef = useRef<(() => void) | null>(null);
 
   const isCallEnabled = process.env.NEXT_PUBLIC_ENABLE_CALL === "true";
   const isCallDebugEnabled = process.env.NEXT_PUBLIC_CALL_DEBUG === "true";
@@ -453,8 +454,8 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
           if (enabled) {
             toast.warning(
               kind === "microphone"
-                ? "Microphone not ready, still joining call"
-                : "Camera not ready, still joining call",
+                ? "Micro chưa sẵn sàng, vẫn đang vào cuộc gọi"
+                : "Camera chưa sẵn sàng, vẫn đang vào cuộc gọi",
             );
           }
         }
@@ -506,6 +507,106 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
     },
     [socket],
   );
+
+  const stopRingtone = useCallback(() => {
+    if (!stopRingtoneRef.current) return;
+    stopRingtoneRef.current();
+    stopRingtoneRef.current = null;
+  }, []);
+
+  const startRingtone = useCallback(
+    (mode: "incoming" | "outgoing") => {
+      stopRingtone();
+
+      if (typeof window === "undefined") return;
+
+      const AudioContextClass =
+        window.AudioContext ||
+        (window as Window & { webkitAudioContext?: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioContextClass) return;
+
+      const audioContext = new AudioContextClass();
+      void audioContext.resume().catch(() => {
+        // Browser may block autoplay until user interacts.
+      });
+
+      let disposed = false;
+      let patternTimeoutId: number | null = null;
+
+      const beep = (
+        frequency: number,
+        durationMs: number,
+        gainValue: number,
+      ) => {
+        if (disposed) return;
+
+        const now = audioContext.currentTime;
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+
+        oscillator.type = "sine";
+        oscillator.frequency.setValueAtTime(frequency, now);
+        gain.gain.setValueAtTime(0.0001, now);
+        gain.gain.exponentialRampToValueAtTime(gainValue, now + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, now + durationMs / 1000);
+
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start(now);
+        oscillator.stop(now + durationMs / 1000 + 0.04);
+      };
+
+      const playPattern = () => {
+        if (mode === "incoming") {
+          beep(740, 180, 0.03);
+          patternTimeoutId = window.setTimeout(() => {
+            beep(740, 180, 0.03);
+          }, 250);
+          return;
+        }
+
+        beep(520, 320, 0.025);
+      };
+
+      playPattern();
+      const intervalId = window.setInterval(playPattern, 1500);
+
+      stopRingtoneRef.current = () => {
+        disposed = true;
+        window.clearInterval(intervalId);
+        if (patternTimeoutId !== null) {
+          window.clearTimeout(patternTimeoutId);
+        }
+        void audioContext.close().catch(() => {
+          // Ignore close errors after cleanup.
+        });
+      };
+    },
+    [stopRingtone],
+  );
+
+  useEffect(() => {
+    if (phase === "outgoing") {
+      startRingtone("outgoing");
+      return () => {
+        stopRingtone();
+      };
+    }
+
+    if (phase === "ringing" && incomingCall) {
+      startRingtone("incoming");
+      return () => {
+        stopRingtone();
+      };
+    }
+
+    stopRingtone();
+
+    return () => {
+      stopRingtone();
+    };
+  }, [incomingCall, phase, startRingtone, stopRingtone]);
 
   const syncLocalStreamFromRoom = useCallback((callType: VideoCallType) => {
     const room = roomRef.current;
@@ -565,7 +666,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   const getLivekitToken = useCallback(
     async (roomId: string): Promise<LivekitTokenResponse> => {
       if (!token) {
-        throw new Error("Missing authenticated token");
+        throw new Error("Thiếu token xác thực");
       }
       if (!apiKey) {
         throw new Error("Missing NEXT_PUBLIC_API_KEY");
@@ -574,7 +675,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
         throw new Error("Missing NEXT_PUBLIC_API_URL");
       }
       if (!ROOM_ID_REGEX.test(roomId)) {
-        throw new Error("RoomId khong hop le");
+        throw new Error("RoomId không hợp lệ");
       }
 
       const participantName = user?.displayName;
@@ -595,7 +696,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       );
 
       if (!tokenRes.ok) {
-        let message = "Khong lay duoc LiveKit token";
+        let message = "Không lấy được LiveKit token";
         try {
           const errData = (await tokenRes.json()) as {
             message?: string;
@@ -616,7 +717,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   const connectToLivekitRoom = useCallback(
     async (call: ActiveCallState) => {
       if (!isCallEnabled) {
-        throw new Error("Call feature dang tat o moi truong hien tai");
+        throw new Error("Tính năng gọi đang tắt ở môi trường hiện tại");
       }
 
       const currentRoom = roomRef.current;
@@ -724,7 +825,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
             if (roomRef.current !== room) return;
             if (room.remoteParticipants.size > 0) return;
 
-            toast.info("Call ended");
+            toast.info("Cuộc gọi đã kết thúc");
             leaveRoomAndReset("room:participant_disconnected_empty", {
               roomId: call.roomId,
             });
@@ -789,17 +890,17 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       callType = "video",
     }: StartCallPayload) => {
       if (!isCallEnabled) {
-        toast.info("Call feature dang tat o moi truong hien tai");
+        toast.info("Tính năng gọi đang tắt ở môi trường hiện tại");
         return;
       }
 
       if (!socket.current || !isConnected) {
-        toast.error("Socket is not connected");
+        toast.error("Kết nối socket chưa sẵn sàng");
         return;
       }
 
       if (!myUserId) {
-        toast.error("Missing authenticated user");
+        toast.error("Không tìm thấy người dùng đã đăng nhập");
         return;
       }
 
@@ -826,7 +927,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
           callType,
         });
 
-        toast.success("Calling...");
+        toast.success("Đang gọi...");
         callDebug("startCall:signal_sent", {
           roomId,
           receiverId,
@@ -834,9 +935,9 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
         });
       } catch (error) {
         console.error("startCall error:", error);
-        toast.error(getErrorMessage(error, "Unable to start call"));
+        toast.error(getErrorMessage(error, "Không thể bắt đầu cuộc gọi"));
         leaveRoomAndReset("startCall:error", {
-          message: getErrorMessage(error, "Unable to start call"),
+          message: getErrorMessage(error, "Không thể bắt đầu cuộc gọi"),
         });
       }
     },
@@ -880,9 +981,9 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       await connectToLivekitRoom(call);
     } catch (error) {
       console.error("acceptIncomingCall error:", error);
-      toast.error(getErrorMessage(error, "Unable to accept call"));
+      toast.error(getErrorMessage(error, "Không thể chấp nhận cuộc gọi"));
       leaveRoomAndReset("acceptIncomingCall:error", {
-        message: getErrorMessage(error, "Unable to accept call"),
+        message: getErrorMessage(error, "Không thể chấp nhận cuộc gọi"),
       });
     } finally {
       isAcceptingIncomingCallRef.current = false;
@@ -950,7 +1051,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       })
       .catch((error: unknown) => {
         console.error("toggleMute error:", error);
-        toast.error("Unable to toggle microphone");
+        toast.error("Không thể bật/tắt micro");
       });
   }, [isMuted, syncLocalStreamFromRoom]);
 
@@ -968,7 +1069,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       })
       .catch((error: unknown) => {
         console.error("toggleCamera error:", error);
-        toast.error("Unable to toggle camera");
+        toast.error("Không thể bật/tắt camera");
       });
   }, [isCameraOff, syncLocalStreamFromRoom]);
 
@@ -1003,7 +1104,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
 
       setIncomingCall(call);
       setPhase("ringing");
-      toast.info(`${call.callerName || "User"} is calling you`);
+      toast.info(`${call.callerName || "Người dùng"} đang gọi cho bạn`);
     };
 
     const onCallAccepted = async (rawPayload: unknown) => {
@@ -1044,11 +1145,9 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
         await connectToLivekitRoom(updatedCall);
       } catch (error) {
         console.error("onCallAccepted error:", error);
-        toast.error(
-          getErrorMessage(error, "Unable to connect to LiveKit room"),
-        );
+        toast.error(getErrorMessage(error, "Không thể kết nối phòng LiveKit"));
         leaveRoomAndReset("socket:call-accepted:error", {
-          message: getErrorMessage(error, "Unable to connect to LiveKit room"),
+          message: getErrorMessage(error, "Không thể kết nối phòng LiveKit"),
         });
       }
     };
@@ -1085,13 +1184,13 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       });
 
       if (reason === "missed") {
-        toast.info("Call missed");
+        toast.info("Cuộc gọi nhỡ");
       } else if (reason === "busy") {
-        toast.info("User is busy");
+        toast.info("Người dùng đang bận");
       } else if (reason === "ended") {
-        toast.info("Call ended");
+        toast.info("Cuộc gọi đã kết thúc");
       } else {
-        toast.info("Call rejected");
+        toast.info("Cuộc gọi bị từ chối");
       }
     };
 
@@ -1114,7 +1213,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       const message =
         (payload.message as string | undefined) ||
         (payload.error as string | undefined) ||
-        "Call error";
+        "Lỗi cuộc gọi";
 
       if (hasLivekitConnectedRef.current) {
         callDebug("socket:call-error:ignored_after_connected", {
@@ -1161,10 +1260,11 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     return () => {
+      stopRingtone();
       cleanupRoom("provider:unmount");
       stopStreams();
     };
-  }, [cleanupRoom, stopStreams]);
+  }, [cleanupRoom, stopRingtone, stopStreams]);
 
   const contextValue = useMemo<VideoCallContextType>(
     () => ({
@@ -1217,10 +1317,10 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Incoming call</DialogTitle>
+            <DialogTitle>Cuộc gọi đến</DialogTitle>
             <DialogDescription>
-              {incomingCall?.callerName || "User"} is calling (
-              {incomingCall?.callType === "video" ? "video" : "audio"})
+              {incomingCall?.callerName || "Người dùng"} đang gọi (
+              {incomingCall?.callType === "video" ? "video" : "thoại"})
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
@@ -1230,14 +1330,14 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
                 void rejectIncomingCall("declined");
               }}
             >
-              <PhoneOff className="w-4 h-4" /> Decline
+              <PhoneOff className="w-4 h-4" /> Từ chối
             </Button>
             <Button
               onClick={() => {
                 void acceptIncomingCall();
               }}
             >
-              <Phone className="w-4 h-4" /> Accept
+              <Phone className="w-4 h-4" /> Chấp nhận
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1259,14 +1359,14 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
                 <div className="flex items-center justify-center w-full h-full text-slate-300">
                   <div className="text-center">
                     <p className="text-lg font-semibold">
-                      {activeCall.peerName || "Connecting..."}
+                      {activeCall.peerName || "Đang kết nối..."}
                     </p>
                     <p className="mt-2 text-sm text-slate-400">
                       {phase === "outgoing"
-                        ? "Ringing..."
+                        ? "Đang đổ chuông..."
                         : phase === "active"
-                          ? "In call"
-                          : "Setting up call..."}
+                          ? "Đang trong cuộc gọi"
+                          : "Đang thiết lập cuộc gọi..."}
                     </p>
                   </div>
                 </div>
