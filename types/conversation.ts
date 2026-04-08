@@ -31,6 +31,7 @@ export interface Conversation {
   groupAvatar?: string;
   members: ConversationMember[];
   lastMessage?: LastMessage;
+  unreadCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -10,6 +10,13 @@ export interface ConversationDetailsResponse {
   conversation: Conversation;
 }
 
+export interface MarkConversationAsReadResponse {
+  success: boolean;
+  conversationId: string;
+  lastReadAt?: string;
+  unreadCount?: number;
+}
+
 export interface MessagesResponse {
   messages: Message[];
   conversation?: Conversation;
@@ -129,6 +136,78 @@ export interface AiAdminAvatarView {
   key: string;
   viewUrl: string;
   expiresIn: number;
+}
+
+export interface UnreadSummaryResult {
+  status: string;
+  assistantName: string;
+  unreadCount: number;
+  threshold?: number;
+  summaryId?: string | null;
+  summary?: {
+    overview?: string;
+    keyPoints?: string[];
+    actionItems?: string[];
+    unansweredQuestions?: string[];
+    urgency?: "low" | "medium" | "high";
+    confidence?: number;
+  } | null;
+  summarizedFromAt?: string | null;
+  summarizedToAt?: string | null;
+  cached?: boolean;
+  degraded?: boolean;
+  degradedReason?: string;
+}
+
+export interface UnreadSummaryCandidateMessage extends Message {
+  pendingStateId?: string;
+  pendingReceivedAt?: string;
+}
+
+export interface UnreadSummaryCandidatesResponse {
+  totalPending: number;
+  messages: UnreadSummaryCandidateMessage[];
+}
+
+export interface UnreadSummaryHistoryItem {
+  _id: string;
+  dayKey: string;
+  unreadCount: number;
+  assistantName?: string;
+  summary?: {
+    overview?: string;
+    urgency?: "low" | "medium" | "high";
+  };
+  createdAt?: string;
+  summarizedFromAt?: string | null;
+  summarizedToAt?: string | null;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    estimatedCostUsd?: number;
+  };
+}
+
+export interface UnreadSummaryHistoryResponse {
+  dayKey: string;
+  items: UnreadSummaryHistoryItem[];
+}
+
+export interface UnreadSummaryMessagesResponse {
+  summaryId: string;
+  dayKey: string;
+  assistantName?: string;
+  summary?: UnreadSummaryResult["summary"];
+  messages: Message[];
+  summarizedFromAt?: string | null;
+  summarizedToAt?: string | null;
+  unreadCount?: number;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    estimatedCostUsd?: number;
+  };
+  createdAt?: string;
 }
 
 // Helper function to map _id to id for MongoDB compatibility
@@ -315,6 +394,20 @@ export const chatService = {
     return mapMongoId(conversation);
   },
 
+  markConversationAsRead: async (
+    conversationId: string,
+  ): Promise<MarkConversationAsReadResponse> => {
+    const res = await api.patch<any>(
+      `/chat/conversations/${conversationId}/read`,
+    );
+    return {
+      success: res.data?.success !== false,
+      conversationId: String(res.data?.conversationId || conversationId),
+      lastReadAt: res.data?.lastReadAt ? String(res.data.lastReadAt) : undefined,
+      unreadCount: Number(res.data?.unreadCount || 0),
+    };
+  },
+
   // Lấy messages của conversation (hỗ trợ cursor pagination)
   getMessages: async (conversationId: string, params?: GetMessagesParams) => {
     const res = await api.get<MessagesResponse>(
@@ -330,6 +423,73 @@ export const chatService = {
       res.data.messages = res.data.messages.map((msg: any) => mapMongoId(msg));
     }
     return res.data;
+  },
+
+  getUnreadSummary: async (
+    conversationId: string,
+    payload?: { maxMessages?: number; forceRefresh?: boolean; messageIds?: string[] },
+  ): Promise<UnreadSummaryResult> => {
+    const res = await api.post<any>(
+      `/chat/conversations/${conversationId}/unread-summary`,
+      payload || {},
+    );
+    return res.data as UnreadSummaryResult;
+  },
+
+  getUnreadSummaryCandidates: async (
+    conversationId: string,
+    params?: { limit?: number },
+  ): Promise<UnreadSummaryCandidatesResponse> => {
+    const res = await api.get<any>(
+      `/chat/conversations/${conversationId}/unread-summary/candidates`,
+      {
+        params: {
+          limit: params?.limit,
+        },
+      },
+    );
+
+    const payload = res.data || {};
+    const messages = Array.isArray(payload.messages)
+      ? normalizeMessageList(payload.messages)
+      : [];
+
+    return {
+      totalPending: Number(payload.totalPending || messages.length || 0),
+      messages,
+    };
+  },
+
+  getUnreadSummaryHistory: async (
+    conversationId: string,
+    date?: string,
+  ): Promise<UnreadSummaryHistoryResponse> => {
+    const res = await api.get<any>(
+      `/chat/conversations/${conversationId}/unread-summary/history`,
+      {
+        params: date ? { date } : undefined,
+      },
+    );
+
+    return res.data as UnreadSummaryHistoryResponse;
+  },
+
+  getUnreadSummaryMessages: async (
+    conversationId: string,
+    summaryId: string,
+  ): Promise<UnreadSummaryMessagesResponse> => {
+    const res = await api.get<any>(
+      `/chat/conversations/${conversationId}/unread-summary/history/${summaryId}/messages`,
+    );
+    const payload = res.data || {};
+    const messages = Array.isArray(payload.messages)
+      ? normalizeMessageList(payload.messages)
+      : [];
+
+    return {
+      ...payload,
+      messages,
+    } as UnreadSummaryMessagesResponse;
   },
 
   // Gửi message
@@ -564,13 +724,45 @@ export const chatService = {
       `/chat/conversations/${conversationId}/members`,
       { memberIds },
     );
-    return mapMongoId((res.data as any).conversation);
+    return {
+      conversation: mapMongoId((res.data as any).conversation),
+      requestCreated: Boolean((res.data as any).requestCreated),
+      pendingApproval: Boolean((res.data as any).pendingApproval),
+    };
+  },
+
+  approveGroupMemberRequest: async (notificationId: string) => {
+    const res = await api.post(
+      `/chat/group-member-requests/${notificationId}/approve`,
+    );
+    return {
+      conversation: mapMongoId((res.data as any).conversation),
+      addedCount: Number((res.data as any).addedCount || 0),
+    };
   },
 
   // Xóa thành viên khỏi nhóm
   removeMemberFromGroup: async (conversationId: string, memberId: string) => {
     const res = await api.delete(
       `/chat/conversations/${conversationId}/members/${memberId}`,
+    );
+    return mapMongoId((res.data as any).conversation);
+  },
+
+  leaveGroup: async (conversationId: string) => {
+    const res = await api.post(`/chat/conversations/${conversationId}/leave`);
+    return {
+      deleted: Boolean((res.data as any).deleted),
+      conversation: (res.data as any).conversation
+        ? mapMongoId((res.data as any).conversation)
+        : null,
+    };
+  },
+
+  transferGroupAdmin: async (conversationId: string, targetUserId: string) => {
+    const res = await api.post(
+      `/chat/conversations/${conversationId}/transfer-admin`,
+      { targetUserId },
     );
     return mapMongoId((res.data as any).conversation);
   },

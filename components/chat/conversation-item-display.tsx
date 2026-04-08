@@ -66,7 +66,7 @@ export function ConversationItemDisplay({
       name={displayName || conversation.name || fallbackName}
       lastMsg={formatLastMessagePreview(conversation) || fallbackLastMessage}
       time={formatMessageTime(conversation.lastMessage?.createdAt)}
-      unread={0}
+      unread={conversation.unreadCount || 0}
       isActive={isActive}
     />
   );
