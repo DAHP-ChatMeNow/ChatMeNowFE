@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useRef, useEffect, useState, useCallback, useMemo } from "react";
+import { Fragment, useRef, useEffect, useState, useCallback } from "react";
 import {
   FileAudio2,
   MoreVertical,
@@ -21,13 +21,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ChatHeader } from "@/components/chat/chat-header";
 import { ChatInput } from "@/components/chat/chat-input";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import {
   useAiConversation,
   useConversation,
   useDeleteMessageForMe,
   useEditMessage,
-  useMarkConversationAsRead,
   useMessages,
   useUnsendMessage,
   useSendAiMessage,
@@ -40,7 +39,6 @@ import { useSocket } from "@/components/providers/socket-provider";
 import { Message } from "@/types/message";
 import { MessageAttachment } from "@/types/message";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
-import { Button } from "@/components/ui/button";
 import { useQueryClient } from "@tanstack/react-query";
 import { chatService, MessagesResponse } from "@/api/chat";
 import { usePresignedUrl } from "@/hooks/use-profile";
@@ -441,54 +439,16 @@ const isAiConversation = (conversation: any): boolean => {
   );
 };
 
-function UnreadSummaryBanner({
-  unreadCount,
-  isGroupConversation,
-  onOpenSummary,
-  onMarkAsRead,
-  isMarkingRead,
+export default function ChatDetailClient({
+  conversationId: conversationIdProp,
 }: {
-  unreadCount: number;
-  isGroupConversation: boolean;
-  onOpenSummary: () => void;
-  onMarkAsRead: () => void;
-  isMarkingRead: boolean;
-}) {
-  return (
-    <div className="rounded-3xl border border-violet-200/80 bg-gradient-to-r from-violet-50 via-fuchsia-50 to-amber-50 px-4 py-3 shadow-sm">
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-violet-600">
-            DanhAI
-          </div>
-          <div className="mt-1 text-sm font-semibold text-slate-900">
-            {unreadCount} tin nhắn chưa đọc
-          </div>
-          <div className="mt-1 text-xs leading-5 text-slate-600">
-            {isGroupConversation
-              ? "Mở tóm tắt AI cho nhóm này hoặc đánh dấu đã đọc sau khi bạn xem xong."
-              : "Đánh dấu đã đọc để đồng bộ trạng thái cho cuộc trò chuyện này."}
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {isGroupConversation && (
-            <Button size="sm" onClick={onOpenSummary}>
-              Tóm tắt bằng DanhAI
-            </Button>
-          )}
-          <Button size="sm" variant="outline" onClick={onMarkAsRead} disabled={isMarkingRead}>
-            {isMarkingRead ? "Đang cập nhật..." : "Đánh dấu đã đọc"}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export default function ChatDetailClient() {
-  const { id } = useParams();
-  const conversationId = id as string;
+  conversationId?: string;
+} = {}) {
+  const params = useParams();
+  const searchParams = useSearchParams();
+  const paramId = (params?.id as string | undefined) || "";
+  const searchId = searchParams.get("conversationId") || "";
+  const conversationId = conversationIdProp || paramId || searchId;
   const user = useAuthStore((state) => state.user);
 
   // Fallback cho userId
@@ -515,9 +475,6 @@ export default function ChatDetailClient() {
       ? messagesData?.messages || []
       : aiConversationData?.messages || [];
   const shouldShowMessageError = Boolean(error) && messages.length === 0;
-  const [summaryOpen, setSummaryOpen] = useState(false);
-  const { mutate: markConversationAsRead, isPending: isMarkingConversationAsRead } =
-    useMarkConversationAsRead();
 
   // Hook tập trung logic phân biệt private/group - tự động fetch partner nếu cần
   const {
@@ -526,80 +483,6 @@ export default function ChatDetailClient() {
     isOnline: isOnlineStatus,
     statusText,
   } = useConversationDisplay(conversation, currentUserId);
-
-  const currentConversationMember = conversation?.members?.find((member: { userId: string | { _id?: string; id?: string }; lastReadAt?: Date }) => {
-    const memberUserId =
-      typeof member.userId === "string"
-        ? member.userId
-        : (member.userId as any)?._id || (member.userId as any)?.id;
-    return memberUserId === currentUserId;
-  });
-
-  const currentLastReadAt = currentConversationMember?.lastReadAt
-    ? new Date(currentConversationMember.lastReadAt as any)
-    : undefined;
-
-  const unreadCount = useMemo(() => {
-    if (!messages.length) {
-      return Number(conversation?.unreadCount || 0);
-    }
-
-    const fallbackCount = messages.filter((message) => {
-      const messageSenderId = getMessageSenderId(message);
-      const createdAt = new Date(message.createdAt);
-
-      if (Number.isNaN(createdAt.getTime())) {
-        return false;
-      }
-
-      if (message.type === "system") {
-        return false;
-      }
-
-      if (messageSenderId && messageSenderId === currentUserId) {
-        return false;
-      }
-
-      if (!currentLastReadAt) {
-        return true;
-      }
-
-      return createdAt.getTime() > currentLastReadAt.getTime();
-    }).length;
-
-    return Number(conversation?.unreadCount ?? fallbackCount);
-  }, [conversation?.unreadCount, currentLastReadAt, currentUserId, messages]);
-
-  const firstUnreadIndex = useMemo(() => {
-    if (!messages.length || unreadCount <= 0) {
-      return -1;
-    }
-
-    return messages.findIndex((message) => {
-      const messageSenderId = getMessageSenderId(message);
-      const createdAt = new Date(message.createdAt);
-
-      if (Number.isNaN(createdAt.getTime())) {
-        return false;
-      }
-
-      if (message.type === "system") {
-        return false;
-      }
-
-      if (messageSenderId && messageSenderId === currentUserId) {
-        return false;
-      }
-
-      if (!currentLastReadAt) {
-        return true;
-      }
-
-      return createdAt.getTime() > currentLastReadAt.getTime();
-    });
-  }, [currentLastReadAt, currentUserId, messages, unreadCount]);
-
-  const isGroupConversation = conversation?.type === "group";
 
   const { mutateAsync: sendMessage, isPending: isSendingMessage } =
     useSendMessage();
@@ -1100,8 +983,6 @@ export default function ChatDetailClient() {
         isOnline={isOnlineStatus}
         avatar={conversationAvatar}
         statusText={statusText}
-        summaryOpen={summaryOpen}
-        onSummaryOpenChange={setSummaryOpen}
       />
 
       <ScrollArea
@@ -1123,10 +1004,7 @@ export default function ChatDetailClient() {
                     Đang tải tin nhắn cũ...
                   </div>
                 )}
-                {messages.map((msg: Message, index: number) => {
-                  const shouldRenderUnreadBanner =
-                    index === firstUnreadIndex && unreadCount > 0;
-
+                {messages.map((msg: Message) => {
                   if (msg.type === "system") {
                     const normalizedSystemContent = String(msg.content || "")
                       .trim()
@@ -1137,24 +1015,14 @@ export default function ChatDetailClient() {
 
                     if (isLeaveNotice) {
                       return (
-                        <Fragment key={msg.id || msg._id}>
-                          {shouldRenderUnreadBanner && (
-                            <UnreadSummaryBanner
-                              unreadCount={unreadCount}
-                              isGroupConversation={isGroupConversation}
-                              onOpenSummary={() => setSummaryOpen(true)}
-                              onMarkAsRead={() =>
-                                markConversationAsRead(conversationId)
-                              }
-                              isMarkingRead={isMarkingConversationAsRead}
-                            />
-                          )}
-                          <div className="flex justify-center">
-                            <div className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
-                              {msg.content || "Người dùng đã rời khỏi nhóm"}
-                            </div>
+                        <div
+                          key={msg.id || msg._id}
+                          className="flex justify-center"
+                        >
+                          <div className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                            {msg.content || "Người dùng đã rời khỏi nhóm"}
                           </div>
-                        </Fragment>
+                        </div>
                       );
                     }
 
@@ -1170,74 +1038,62 @@ export default function ChatDetailClient() {
                       !!systemSenderId && systemSenderId === currentUserId;
 
                     return (
-                      <Fragment key={msg.id || msg._id}>
-                        {shouldRenderUnreadBanner && (
-                          <UnreadSummaryBanner
-                            unreadCount={unreadCount}
-                            isGroupConversation={isGroupConversation}
-                            onOpenSummary={() => setSummaryOpen(true)}
-                            onMarkAsRead={() =>
-                              markConversationAsRead(conversationId)
-                            }
-                            isMarkingRead={isMarkingConversationAsRead}
-                          />
+                      <div
+                        key={msg.id || msg._id}
+                        className={`flex items-end gap-2 ${
+                          isMySystemMessage ? "justify-end" : "justify-start"
+                        }`}
+                      >
+                        {!isMySystemMessage && (
+                          <div
+                            className={`h-8 w-8 rounded-full flex items-center justify-center ${callStyle.iconClass}`}
+                          >
+                            <callStyle.Icon className="w-4 h-4" />
+                          </div>
                         )}
+
                         <div
-                          className={`flex items-end gap-2 ${
-                            isMySystemMessage ? "justify-end" : "justify-start"
+                          className={`px-3.5 py-2 rounded-2xl shadow-sm max-w-[84%] md:max-w-[60%] border ${
+                            isMySystemMessage
+                              ? "bg-blue-600 text-white rounded-br-none border-blue-600"
+                              : `bg-white text-slate-800 rounded-bl-none ${callStyle.bubbleClass}`
                           }`}
                         >
-                          {!isMySystemMessage && (
-                            <div
-                              className={`h-8 w-8 rounded-full flex items-center justify-center ${callStyle.iconClass}`}
-                            >
-                              <callStyle.Icon className="w-4 h-4" />
-                            </div>
-                          )}
-
-                          <div
-                            className={`px-3.5 py-2 rounded-2xl shadow-sm max-w-[84%] md:max-w-[60%] border ${
+                          <p
+                            className={`text-[13px] font-semibold ${
                               isMySystemMessage
-                                ? "bg-blue-600 text-white rounded-br-none border-blue-600"
-                                : `bg-white text-slate-800 rounded-bl-none ${callStyle.bubbleClass}`
+                                ? "text-white"
+                                : "text-slate-800"
                             }`}
                           >
-                            <p
-                              className={`text-[13px] font-semibold ${
-                                isMySystemMessage
-                                  ? "text-white"
-                                  : "text-slate-800"
-                              }`}
-                            >
-                              {callTitle}
-                            </p>
-                            <p
-                              className={`mt-0.5 text-[11px] ${
-                                isMySystemMessage
-                                  ? "text-blue-100"
-                                  : "text-slate-600"
-                              }`}
-                            >
-                              {callDescription}
-                            </p>
-                            <p
-                              className={`mt-0.5 text-[10px] ${
-                                isMySystemMessage
-                                  ? "text-blue-100"
-                                  : "text-slate-400"
-                              }`}
-                            >
-                              {getSystemCallTime(msg)}
-                            </p>
-                          </div>
-
-                          {isMySystemMessage && (
-                            <div className="h-8 w-8 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-600">
-                              <callStyle.Icon className="w-4 h-4" />
-                            </div>
-                          )}
+                            {callTitle}
+                          </p>
+                          <p
+                            className={`mt-0.5 text-[11px] ${
+                              isMySystemMessage
+                                ? "text-blue-100"
+                                : "text-slate-600"
+                            }`}
+                          >
+                            {callDescription}
+                          </p>
+                          <p
+                            className={`mt-0.5 text-[10px] ${
+                              isMySystemMessage
+                                ? "text-blue-100"
+                                : "text-slate-400"
+                            }`}
+                          >
+                            {getSystemCallTime(msg)}
+                          </p>
                         </div>
-                      </Fragment>
+
+                        {isMySystemMessage && (
+                          <div className="h-8 w-8 rounded-full flex items-center justify-center bg-blue-500/20 text-blue-600">
+                            <callStyle.Icon className="w-4 h-4" />
+                          </div>
+                        )}
+                      </div>
                     );
                   }
 
@@ -1352,178 +1208,173 @@ export default function ChatDetailClient() {
                   };
 
                   return (
-                    <Fragment key={messageId}>
-                      {shouldRenderUnreadBanner && (
-                        <UnreadSummaryBanner
-                          unreadCount={unreadCount}
-                          isGroupConversation={isGroupConversation}
-                          onOpenSummary={() => setSummaryOpen(true)}
-                          onMarkAsRead={() =>
-                            markConversationAsRead(conversationId)
-                          }
-                          isMarkingRead={isMarkingConversationAsRead}
+                    <div
+                      key={messageId}
+                      className={`flex items-end gap-2 ${isMe ? "justify-end" : "justify-start"}`}
+                    >
+                      {!isMe && (
+                        <PresignedAvatar
+                          avatarKey={senderAvatarKey}
+                          displayName={senderDisplayName}
+                          className="w-8 h-8 shrink-0 self-end"
                         />
                       )}
                       <div
-                        className={`flex items-end gap-2 ${isMe ? "justify-end" : "justify-start"}`}
-                      >
-                        {!isMe && (
-                          <PresignedAvatar
-                            avatarKey={senderAvatarKey}
-                            displayName={senderDisplayName}
-                            className="w-8 h-8 shrink-0 self-end"
-                          />
-                        )}
-                        <div
-                          data-message-action-scope={isMe ? "true" : undefined}
-                          onTouchStart={() => {
-                            if (!isMe) return;
-                            handleMessageTouchStart(messageId, canShowActions);
-                          }}
-                          onTouchEnd={clearLongPressTimer}
-                          onTouchCancel={clearLongPressTimer}
-                          onTouchMove={clearLongPressTimer}
-                          className={`group rounded-2xl text-[14px] md:text-[15px] max-w-[84%] md:max-w-[70%] xl:max-w-[64%] ${
-                            isPlainAttachmentBubble
-                              ? "w-fit p-0 bg-transparent text-slate-800 shadow-none"
-                              : `px-4 py-2.5 shadow-sm ${
-                                  isMe
-                                    ? "bg-blue-600 text-white rounded-br-none"
-                                    : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
-                                }`
-                          }`}
-                        >
-                          {attachments.length > 0 && (
-                            <div className={msg.content ? "mb-2" : ""}>
-                              <div className="flex flex-col gap-2">
-                                {attachments.map((attachment, index) => (
-                                  <MessageAttachmentItem
-                                    key={`${attachment.key || attachment.url || attachment.fileName}-${index}`}
-                                    attachment={attachment}
-                                    isMe={isMe}
-                                  />
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {msg.content ? renderMessageContent(msg.content) : null}
-                          {msg.type === "audio" && attachments.length === 0 && (
-                            <div
-                              className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                        data-message-action-scope={isMe ? "true" : undefined}
+                        onTouchStart={() => {
+                          if (!isMe) return;
+                          handleMessageTouchStart(messageId, canShowActions);
+                        }}
+                        onTouchEnd={clearLongPressTimer}
+                        onTouchCancel={clearLongPressTimer}
+                        onTouchMove={clearLongPressTimer}
+                        className={`group rounded-2xl text-[14px] md:text-[15px] max-w-[84%] md:max-w-[70%] xl:max-w-[64%] ${
+                          isPlainAttachmentBubble
+                            ? "w-fit p-0 bg-transparent text-slate-800 shadow-none"
+                            : `px-4 py-2.5 shadow-sm ${
                                 isMe
-                                  ? "bg-blue-500/40 text-blue-50"
-                                  : "bg-slate-100 text-slate-700"
-                              }`}
-                            >
-                              <FileAudio2 className="h-4 w-4" />
-                              Tin nhắn ghi âm
+                                  ? "bg-blue-600 text-white rounded-br-none"
+                                  : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
+                              }`
+                        }`}
+                      >
+                        {attachments.length > 0 && (
+                          <div className={msg.content ? "mb-2" : ""}>
+                            <div className="flex flex-col gap-2">
+                              {attachments.map((attachment, index) => (
+                                <MessageAttachmentItem
+                                  key={`${attachment.key || attachment.url || attachment.fileName}-${index}`}
+                                  attachment={attachment}
+                                  isMe={isMe}
+                                />
+                              ))}
                             </div>
-                          )}
-                          {isAiMessage && !isMe && (
-                            <div className="mt-1.5 flex justify-start">
-                              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
-                                AI
+                          </div>
+                        )}
+                        {msg.content ? renderMessageContent(msg.content) : null}
+                        {msg.type === "audio" && attachments.length === 0 && (
+                          <div
+                            className={`inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm ${
+                              isMe
+                                ? "bg-blue-500/40 text-blue-50"
+                                : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            <FileAudio2 className="h-4 w-4" />
+                            Tin nhắn ghi âm
+                          </div>
+                        )}
+                        {isAiMessage && !isMe && (
+                          <div className="mt-1.5 flex justify-start">
+                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-blue-600">
+                              AI
+                            </span>
+                          </div>
+                        )}
+                        {!isMe && statusText && (
+                          <div
+                            className={`text-[10px] mt-1 text-right ${
+                              isMe ? "text-blue-100" : "text-slate-400"
+                            }`}
+                            suppressHydrationWarning
+                          >
+                            {statusText}
+                          </div>
+                        )}
+
+                        {!isMe && noteText && (
+                          <div
+                            className={`mt-1 text-[10px] ${
+                              isMe ? "text-blue-100" : "text-slate-400"
+                            }`}
+                          >
+                            {noteText}
+                          </div>
+                        )}
+
+                        {isMe && (statusText || noteText || canDeleteForMe) && (
+                          <div className="mt-1.5 flex items-center justify-end gap-1.5">
+                            {noteText && (
+                              <span
+                                className={`text-[10px] ${outgoingMetaClass}`}
+                              >
+                                {noteText}
                               </span>
-                            </div>
-                          )}
-                          {!isMe && statusText && (
-                            <div
-                              className={`text-[10px] mt-1 text-right ${
-                                isMe ? "text-blue-100" : "text-slate-400"
-                              }`}
-                              suppressHydrationWarning
-                            >
-                              {statusText}
-                            </div>
-                          )}
+                            )}
+                            {statusText && (
+                              <span
+                                className={`text-[10px] ${outgoingMetaClass}`}
+                                suppressHydrationWarning
+                              >
+                                {statusText}
+                              </span>
+                            )}
 
-                          {!isMe && noteText && (
-                            <div
-                              className={`mt-1 text-[10px] ${
-                                isMe ? "text-blue-100" : "text-slate-400"
-                              }`}
-                            >
-                              {noteText}
-                            </div>
-                          )}
-
-                          {isMe && (statusText || noteText || canDeleteForMe) && (
-                            <div className="mt-1.5 flex items-center justify-end gap-1.5">
-                              {noteText && (
-                                <span
-                                  className={`text-[10px] ${outgoingMetaClass}`}
-                                >
-                                  {noteText}
-                                </span>
-                              )}
-                              {statusText && (
-                                <span
-                                  className={`text-[10px] ${outgoingMetaClass}`}
-                                  suppressHydrationWarning
-                                >
-                                  {statusText}
-                                </span>
-                              )}
-
-                              {canShowActions && (
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <button
-                                      type="button"
-                                      aria-label="Mở tùy chọn tin nhắn"
-                                      onClick={(event) => {
-                                        event.stopPropagation();
-                                        if (messageId) {
-                                          setActiveMessageActionsId(messageId);
-                                        }
-                                      }}
-                                      className={`inline-flex items-center justify-center rounded-full p-1 transition-all duration-150 ${outgoingActionClass} ${
-                                        isActionsVisible
-                                          ? "opacity-100 pointer-events-auto"
-                                          : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
-                                      }`}
-                                      disabled={
-                                        isEditPending ||
-                                        isUnsendPending ||
-                                        isDeletePending
+                            {canShowActions && (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <button
+                                    type="button"
+                                    aria-label="Mở tùy chọn tin nhắn"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      if (messageId) {
+                                        setActiveMessageActionsId(messageId);
                                       }
-                                    >
-                                      <MoreVertical className="h-4 w-4" />
-                                    </button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent
-                                    align="end"
-                                    className="w-40"
+                                    }}
+                                    className={`inline-flex items-center justify-center rounded-full p-1 transition-all duration-150 ${outgoingActionClass} ${
+                                      isActionsVisible
+                                        ? "opacity-100 pointer-events-auto"
+                                        : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                                    }`}
+                                    disabled={
+                                      isEditPending ||
+                                      isUnsendPending ||
+                                      isDeletePending
+                                    }
                                   >
-                                    {canEdit && (
-                                      <DropdownMenuItem
-                                        onClick={handleEditMessage}
-                                      >
-                                        Sửa tin nhắn
-                                      </DropdownMenuItem>
-                                    )}
-                                    {canUnsend && (
-                                      <DropdownMenuItem
-                                        onClick={handleUnsendMessage}
-                                      >
-                                        Thu hồi tin nhắn
-                                      </DropdownMenuItem>
-                                    )}
-                                    {canDeleteForMe && (
-                                      <DropdownMenuItem
-                                        onClick={handleDeleteForMe}
-                                      >
-                                        Xóa phía tôi
-                                      </DropdownMenuItem>
-                                    )}
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              )}
-                            </div>
-                          )}
-                        </div>
+                                    <MoreVertical className="h-4 w-4" />
+                                  </button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent
+                                  align="end"
+                                  className="w-40"
+                                >
+                                  {canEdit && (
+                                    <DropdownMenuItem
+                                      onClick={handleEditMessage}
+                                    >
+                                      Sửa tin nhắn
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canUnsend && (
+                                    <DropdownMenuItem
+                                      onClick={handleUnsendMessage}
+                                    >
+                                      Thu hồi tin nhắn
+                                    </DropdownMenuItem>
+                                  )}
+                                  {canDeleteForMe && (
+                                    <DropdownMenuItem
+                                      onClick={handleDeleteForMe}
+                                    >
+                                      Xóa phía tôi
+                                    </DropdownMenuItem>
+                                  )}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        )}
                       </div>
-                    </Fragment>
+                      {isMe && (
+                        <PresignedAvatar
+                          avatarKey={senderAvatarKey}
+                          displayName={senderDisplayName}
+                          className="w-8 h-8 shrink-0 self-end"
+                        />
+                      )}
+                    </div>
                   );
                 })}
 

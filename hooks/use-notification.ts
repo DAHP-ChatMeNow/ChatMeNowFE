@@ -67,3 +67,27 @@ export const useDeleteNotification = () => {
     },
   });
 };
+
+export const useApproveGroupMemberRequest = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: notificationService.approveGroupMemberRequest,
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+
+      const conversationId = data?.conversation?._id || data?.conversation?.id;
+      if (conversationId) {
+        queryClient.invalidateQueries({
+          queryKey: ["conversation", conversationId],
+        });
+      }
+
+      toast.success("Đã duyệt yêu cầu thêm thành viên");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể duyệt yêu cầu");
+    },
+  });
+};

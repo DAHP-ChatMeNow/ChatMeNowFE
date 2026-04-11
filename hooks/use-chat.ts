@@ -186,6 +186,22 @@ export const useConversation = (conversationId: string) => {
   });
 };
 
+export const useMarkConversationAsRead = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      chatService.markConversationAsRead(conversationId),
+    onSuccess: (_, conversationId) => {
+      queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể cập nhật trạng thái đã đọc");
+    },
+  });
+};
+
 export const useAiConversation = () => {
   return useQuery({
     queryKey: ["ai-conversation"],
@@ -618,12 +634,16 @@ export const useAddMemberToGroup = () => {
       conversationId: string;
       memberIds: string[];
     }) => chatService.addMemberToGroup(conversationId, memberIds),
-    onSuccess: (_, { conversationId }) => {
+    onSuccess: (result, { conversationId }) => {
       queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
       });
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
-      toast.success("Đã thêm thành viên vào nhóm");
+      if (result?.requestCreated) {
+        toast.success("Đã gửi yêu cầu, chờ nhóm trưởng duyệt");
+      } else {
+        toast.success("Đã thêm thành viên vào nhóm");
+      }
     },
     onError: (error: any) => {
       toast.error(
@@ -669,6 +689,47 @@ export const useDissolveGroup = () => {
     },
     onError: (error: any) => {
       toast.error(error?.response?.data?.message || "Không thể giải tán nhóm");
+    },
+  });
+};
+
+export const useLeaveGroup = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (conversationId: string) => chatService.leaveGroup(conversationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Đã rời nhóm");
+    },
+    onError: (error: any) => {
+      toast.error(error?.response?.data?.message || "Không thể rời nhóm");
+    },
+  });
+};
+
+export const useTransferGroupAdmin = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      conversationId,
+      targetUserId,
+    }: {
+      conversationId: string;
+      targetUserId: string;
+    }) => chatService.transferGroupAdmin(conversationId, targetUserId),
+    onSuccess: (_, { conversationId }) => {
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", conversationId],
+      });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      toast.success("Đã chuyển quyền admin");
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || "Không thể chuyển quyền admin",
+      );
     },
   });
 };

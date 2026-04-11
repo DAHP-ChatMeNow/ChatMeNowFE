@@ -60,4 +60,11 @@ export const notificationService = {
     const res = await api.delete(`/notifications/${notificationId}`);
     return res.data;
   },
+
+  approveGroupMemberRequest: async (notificationId: string) => {
+    const res = await api.post(
+      `/chat/group-member-requests/${notificationId}/approve`,
+    );
+    return res.data;
+  },
 };

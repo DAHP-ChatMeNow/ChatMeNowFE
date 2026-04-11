@@ -9,6 +9,7 @@ import {
   useNotifications,
   useMarkAllNotificationsAsRead,
   useMarkNotificationAsRead,
+  useApproveGroupMemberRequest,
 } from "@/hooks/use-notification";
 import { Notification } from "@/types/notification";
 import {
@@ -26,6 +27,8 @@ const getNotificationIcon = (type: string) => {
       return <Heart className="w-3 h-3 text-white" />;
     case "message":
       return <MessageSquare className="w-3 h-3 text-white" />;
+    case "group_member_request":
+      return <UserPlus className="w-3 h-3 text-white" />;
     default:
       return <Bell className="w-3 h-3 text-white" />;
   }
@@ -40,6 +43,8 @@ const getNotificationBgColor = (type: string) => {
       return "bg-red-500";
     case "message":
       return "bg-blue-500";
+    case "group_member_request":
+      return "bg-violet-500";
     default:
       return "bg-slate-500";
   }
@@ -83,10 +88,12 @@ export default function NotificationsPage() {
   const { mutate: markAllAsRead, isPending: isMarkingAll } =
     useMarkAllNotificationsAsRead();
   const { mutate: markAsRead } = useMarkNotificationAsRead();
+  const { mutate: approveGroupMemberRequest } = useApproveGroupMemberRequest();
   const { mutate: acceptFriendRequest } = useAcceptFriendRequestContact();
   const { mutate: rejectFriendRequest } = useRejectFriendRequestContact();
   const [acceptingIds, setAcceptingIds] = useState<string[]>([]);
   const [rejectingIds, setRejectingIds] = useState<string[]>([]);
+  const [approvingIds, setApprovingIds] = useState<string[]>([]);
   const notifications = notificationsData?.notifications || [];
   const unreadNotifications = notifications.filter((noti) => !noti.isRead);
 
@@ -116,6 +123,15 @@ export default function NotificationsPage() {
     rejectFriendRequest(requestId, {
       onSettled: () => {
         setRejectingIds(rejectingIds.filter((id) => id !== notificationId));
+      },
+    });
+  };
+
+  const handleApproveGroupMemberRequest = (notificationId: string) => {
+    setApprovingIds((prev) => [...prev, notificationId]);
+    approveGroupMemberRequest(notificationId, {
+      onSettled: () => {
+        setApprovingIds((prev) => prev.filter((id) => id !== notificationId));
       },
     });
   };
@@ -258,6 +274,27 @@ export default function NotificationsPage() {
                         </Button>
                       </div>
                     )}
+
+                    {noti.type === "group_member_request" &&
+                    noti.metadata?.status !== "approved" ? (
+                      <div className="flex gap-2 mt-3">
+                        <Button
+                          size="sm"
+                          className="h-8 px-4 bg-violet-600 rounded-lg hover:bg-violet-700"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            handleApproveGroupMemberRequest(noti.id);
+                          }}
+                          disabled={approvingIds.includes(noti.id)}
+                        >
+                          {approvingIds.includes(noti.id) ? (
+                            <Loader className="w-3 h-3 animate-spin" />
+                          ) : (
+                            "Duyệt"
+                          )}
+                        </Button>
+                      </div>
+                    ) : null}
                   </div>
                   {!noti.isRead && (
                     <div className="w-2.5 h-2.5 bg-blue-600 rounded-full mt-2" />

@@ -1,6 +1,6 @@
 "use client";
 
-import { type Dispatch, type SetStateAction, useMemo, useState } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ChevronLeft,
   Phone,
@@ -16,6 +16,7 @@ import {
   ShieldBan,
   Trash2,
   LogOut,
+  Sparkles,
 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
@@ -47,7 +48,9 @@ import {
   useMessages,
   useConversation,
   useAddMemberToGroup,
+  useLeaveGroup,
   useRemoveMemberFromGroup,
+  useTransferGroupAdmin,
   useDissolveGroup,
 } from "@/hooks/use-chat";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -57,6 +60,8 @@ import { useVideoCall } from "@/components/providers/video-call-provider";
 import { Conversation, ConversationMember } from "@/types/conversation";
 import { Message, MessageAttachment } from "@/types/message";
 import { User } from "@/types/user";
+import { UnreadSummaryDialog } from "@/components/chat/unread-summary-dialog";
+import { usePresignedUrl } from "@/hooks/use-profile";
 
 type ChatBackgroundKey = "default" | "sky" | "sunset" | "mint" | "night";
 
@@ -85,6 +90,23 @@ type GroupMemberView = {
 };
 
 const URL_REGEX = /(https?:\/\/[^\s]+)/gi;
+
+type CachedMediaItem = {
+  id: string;
+  source: string;
+  createdAt: string;
+};
+
+type CachedLinkItem = {
+  id: string;
+  link: string;
+  createdAt: string;
+};
+
+type SideSheetCache = {
+  media: CachedMediaItem[];
+  links: CachedLinkItem[];
+};
 
 const getMemberUserId = (
   member: ChatConversationMember,
@@ -131,11 +153,15 @@ export function ChatHeader({
   isOnline,
   avatar,
   statusText,
+  summaryOpen: controlledSummaryOpen,
+  onSummaryOpenChange,
 }: {
   name?: string;
   isOnline?: boolean;
   avatar?: string;
   statusText?: string;
+  summaryOpen?: boolean;
+  onSummaryOpenChange?: Dispatch<SetStateAction<boolean>>;
 }) {
   const router = useRouter();
   const params = useParams();
@@ -165,10 +191,16 @@ export function ChatHeader({
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [selectedBackground, setSelectedBackground] =
     useState<ChatBackgroundKey>("default");
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
   const [dissolveConfirmOpen, setDissolveConfirmOpen] = useState(false);
+  const [internalSummaryOpen, setInternalSummaryOpen] = useState(false);
+  const summaryOpen = controlledSummaryOpen ?? internalSummaryOpen;
+  const setSummaryOpen = onSummaryOpenChange ?? setInternalSummaryOpen;
 
   const addMemberMutation = useAddMemberToGroup();
+  const leaveGroupMutation = useLeaveGroup();
   const removeMemberMutation = useRemoveMemberFromGroup();
+  const transferAdminMutation = useTransferGroupAdmin();
   const dissolveMutation = useDissolveGroup();
 
   // Derive partnerId from conversation members for private chats
@@ -415,6 +447,14 @@ export function ChatHeader({
                 >
                   <Palette className="text-slate-500" /> Đổi background
                 </DropdownMenuItem>
+                {conversation?.type === "group" && (
+                  <DropdownMenuItem
+                    className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                    onClick={() => setSummaryOpen(true)}
+                  >
+                    <Sparkles className="text-cyan-500" /> Tóm tắt unread
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
 
                 {/* Private chat options */}
@@ -458,6 +498,15 @@ export function ChatHeader({
                 {conversation?.type === "group" && (
                   <>
                     <DropdownMenuItem
+                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-red-600 focus:text-red-700"
+                      onClick={() => setLeaveConfirmOpen(true)}
+                    >
+                      <LogOut className="text-red-500" /> Rời nhóm
+                    </DropdownMenuItem>
+
+                    <DropdownMenuSeparator />
+
+                    <DropdownMenuItem
                       className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
                       onClick={() => setInviteOpen(true)}
                     >
@@ -492,6 +541,7 @@ export function ChatHeader({
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         tab={sheetTab}
+        conversationId={currentId}
         messages={messages}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}
@@ -503,6 +553,13 @@ export function ChatHeader({
               : "Tìm kiếm tin nhắn"
         }
       />
+          <UnreadSummaryDialog
+            open={summaryOpen}
+            onOpenChange={setSummaryOpen}
+            conversationId={currentId}
+            conversationName={displayName}
+            backgroundTheme={selectedBackground}
+          />
       <CreateGroupWithPartnerDialog
         open={groupOpen}
         onOpenChange={(o) => {
@@ -562,12 +619,54 @@ export function ChatHeader({
         onOpenChange={setManageOpen}
         members={groupMembers}
         isAdmin={isAdmin}
+        onTransferAdmin={(targetUserId) => {
+          if (!currentId) return;
+          transferAdminMutation.mutate({
+            conversationId: currentId,
+            targetUserId,
+          });
+        }}
+        transferring={transferAdminMutation.isPending}
         onRemoveMember={(memberId) => {
           if (!currentId) return;
           removeMemberMutation.mutate({ conversationId: currentId, memberId });
         }}
         removing={removeMemberMutation.isPending}
       />
+      <Dialog open={leaveConfirmOpen} onOpenChange={setLeaveConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Rời nhóm</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-slate-600">
+            Bạn có chắc chắn muốn rời nhóm này?
+          </p>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setLeaveConfirmOpen(false)}
+              disabled={leaveGroupMutation.isPending}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!currentId) return;
+                leaveGroupMutation.mutate(currentId, {
+                  onSuccess: () => {
+                    setLeaveConfirmOpen(false);
+                    router.push("/messages");
+                  },
+                });
+              }}
+              disabled={leaveGroupMutation.isPending}
+            >
+              {leaveGroupMutation.isPending ? "Đang rời..." : "Rời nhóm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={dissolveConfirmOpen} onOpenChange={setDissolveConfirmOpen}>
         <DialogContent>
           <DialogHeader>
@@ -656,6 +755,7 @@ function MessagesSideSheet({
   open,
   onOpenChange,
   tab,
+  conversationId,
   messages,
   searchQuery,
   onSearchQueryChange,
@@ -664,26 +764,153 @@ function MessagesSideSheet({
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tab: "media" | "links" | "search";
+  conversationId?: string;
   messages: Message[];
   searchQuery: string;
   onSearchQueryChange: (v: string) => void;
   title: string;
 }) {
-  const mediaMsgs = useMemo(
-    () =>
-      messages.filter(
-        (m) =>
-          m.type === "image" ||
-          (m.attachments || []).some((a: MessageAttachment) =>
-            (a.fileType || "").startsWith("image"),
-          ),
-      ),
-    [messages],
+  const cacheKey = useMemo(
+    () => (conversationId ? `chat-side-sheet-cache:${conversationId}` : null),
+    [conversationId],
   );
-  const linkMsgs = useMemo(
-    () => messages.filter((m) => (m.content || "").match(URL_REGEX)),
-    [messages],
+
+  const [cachedMedia, setCachedMedia] = useState<CachedMediaItem[]>([]);
+  const [cachedLinks, setCachedLinks] = useState<CachedLinkItem[]>([]);
+
+  const isDirectMediaUrl = useCallback((value?: string) => {
+    if (!value) return false;
+    return /^(https?:\/\/|data:|blob:|\/)\S+/i.test(value);
+  }, []);
+
+  const normalizeDateString = useCallback((value: unknown) => {
+    if (!value) return new Date().toISOString();
+    const date = new Date(value as string | number | Date);
+    if (Number.isNaN(date.getTime())) return new Date().toISOString();
+    return date.toISOString();
+  }, []);
+
+  const extractMedia = useCallback(
+    (inputMessages: Message[]): CachedMediaItem[] => {
+      const collected: CachedMediaItem[] = [];
+
+      inputMessages.forEach((message, index) => {
+        const messageId = String(message.id || message._id || `m-${index}`);
+        const createdAt = normalizeDateString(message.createdAt);
+
+        const imageAttachment = (message.attachments || []).find(
+          (a: MessageAttachment) => (a.fileType || "").startsWith("image"),
+        );
+
+        const source =
+          imageAttachment?.url ||
+          imageAttachment?.key ||
+          (message.type === "image" ? String(message.content || "") : "");
+
+        if (!source) return;
+
+        collected.push({
+          id: `${messageId}-${source}`,
+          source,
+          createdAt,
+        });
+      });
+
+      return collected;
+    },
+    [normalizeDateString],
   );
+
+  const extractLinks = useCallback(
+    (inputMessages: Message[]): CachedLinkItem[] => {
+      const collected: CachedLinkItem[] = [];
+
+      inputMessages.forEach((message, index) => {
+        const links = ((message.content || "").match(URL_REGEX) || []) as string[];
+        if (links.length === 0) return;
+
+        const messageId = String(message.id || message._id || `m-${index}`);
+        const createdAt = normalizeDateString(message.createdAt);
+
+        links.forEach((link, linkIndex) => {
+          collected.push({
+            id: `${messageId}-${linkIndex}-${link}`,
+            link,
+            createdAt,
+          });
+        });
+      });
+
+      return collected;
+    },
+    [normalizeDateString],
+  );
+
+  useEffect(() => {
+    if (!cacheKey || typeof window === "undefined") {
+      setCachedMedia([]);
+      setCachedLinks([]);
+      return;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(cacheKey);
+      if (!raw) {
+        setCachedMedia([]);
+        setCachedLinks([]);
+        return;
+      }
+
+      const parsed = JSON.parse(raw) as SideSheetCache;
+      setCachedMedia(Array.isArray(parsed?.media) ? parsed.media : []);
+      setCachedLinks(Array.isArray(parsed?.links) ? parsed.links : []);
+    } catch {
+      setCachedMedia([]);
+      setCachedLinks([]);
+    }
+  }, [cacheKey]);
+
+  const mediaMsgs = useMemo(() => {
+    const fromCurrentMessages = extractMedia(messages);
+    const map = new Map<string, CachedMediaItem>();
+
+    cachedMedia.forEach((item) => {
+      if (item?.id && item?.source) map.set(item.id, item);
+    });
+    fromCurrentMessages.forEach((item) => map.set(item.id, item));
+
+    return Array.from(map.values()).sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    );
+  }, [messages, cachedMedia, extractMedia]);
+
+  const linkMsgs = useMemo(() => {
+    const fromCurrentMessages = extractLinks(messages);
+    const map = new Map<string, CachedLinkItem>();
+
+    cachedLinks.forEach((item) => {
+      if (item?.id && item?.link) map.set(item.id, item);
+    });
+    fromCurrentMessages.forEach((item) => map.set(item.id, item));
+
+    return Array.from(map.values()).sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    );
+  }, [messages, cachedLinks, extractLinks]);
+
+  useEffect(() => {
+    if (!cacheKey || typeof window === "undefined") return;
+
+    const payload: SideSheetCache = {
+      media: mediaMsgs.slice(0, 500),
+      links: linkMsgs.slice(0, 500),
+    };
+
+    window.localStorage.setItem(cacheKey, JSON.stringify(payload));
+  }, [cacheKey, mediaMsgs, linkMsgs]);
+
   const searchMsgs = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) return [];
@@ -714,21 +941,13 @@ function MessagesSideSheet({
               {mediaMsgs.length === 0 ? (
                 <div className="text-sm text-slate-500">Chưa có hình ảnh</div>
               ) : (
-                mediaMsgs.map((m, idx) => {
-                  const img = (m.attachments || []).find(
-                    (a: MessageAttachment) =>
-                      (a.fileType || "").startsWith("image"),
-                  );
-                  const src = img?.url || m.content;
-                  return (
-                    <img
-                      key={m.id || idx}
-                      src={src}
-                      alt="image"
-                      className="object-cover w-full h-24 border rounded-md"
-                    />
-                  );
-                })
+                mediaMsgs.map((item) => (
+                  <MediaThumbnail
+                    key={item.id}
+                    source={item.source}
+                    isDirectMediaUrl={isDirectMediaUrl}
+                  />
+                ))
               )}
             </div>
           )}
@@ -737,28 +956,21 @@ function MessagesSideSheet({
               {linkMsgs.length === 0 ? (
                 <div className="text-sm text-slate-500">Chưa có liên kết</div>
               ) : (
-                linkMsgs.map((m, idx) => {
-                  const links = ((m.content || "").match(URL_REGEX) ||
-                    []) as string[];
-                  return (
-                    <div key={m.id || idx} className="p-2 border rounded-md">
-                      {links.map((l: string, i: number) => (
-                        <a
-                          key={i}
-                          href={l}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm text-blue-600 break-all"
-                        >
-                          {l}
-                        </a>
-                      ))}
-                      <div className="mt-1 text-xs text-slate-500">
-                        {new Date(m.createdAt).toLocaleString()}
-                      </div>
+                linkMsgs.map((item) => (
+                  <div key={item.id} className="p-2 border rounded-md">
+                    <a
+                      href={item.link}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm text-blue-600 break-all"
+                    >
+                      {item.link}
+                    </a>
+                    <div className="mt-1 text-xs text-slate-500">
+                      {new Date(item.createdAt).toLocaleString()}
                     </div>
-                  );
-                })
+                  </div>
+                ))
               )}
             </div>
           )}
@@ -783,6 +995,36 @@ function MessagesSideSheet({
         </ScrollArea>
       </SheetContent>
     </Sheet>
+  );
+}
+
+function MediaThumbnail({
+  source,
+  isDirectMediaUrl,
+}: {
+  source: string;
+  isDirectMediaUrl: (value?: string) => boolean;
+}) {
+  const needsPresigned = !isDirectMediaUrl(source);
+  const { data } = usePresignedUrl(source, needsPresigned);
+
+  const resolvedSrc = needsPresigned ? data?.viewUrl : source;
+
+  if (!resolvedSrc) {
+    return (
+      <div className="flex items-center justify-center w-full h-24 border rounded-md bg-slate-50 text-xs text-slate-400">
+        Đang tải...
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={resolvedSrc}
+      alt="image"
+      className="object-cover w-full h-24 border rounded-md"
+      loading="lazy"
+    />
   );
 }
 
@@ -998,6 +1240,8 @@ function ManageMembersDialog({
   onOpenChange,
   members,
   isAdmin,
+  onTransferAdmin,
+  transferring,
   onRemoveMember,
   removing,
 }: {
@@ -1005,10 +1249,15 @@ function ManageMembersDialog({
   onOpenChange: (o: boolean) => void;
   members: GroupMemberView[];
   isAdmin: boolean;
+  onTransferAdmin: (memberId: string) => void;
+  transferring: boolean;
   onRemoveMember: (memberId: string) => void;
   removing: boolean;
 }) {
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  const [confirmTransferId, setConfirmTransferId] = useState<string | null>(
+    null,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1047,19 +1296,56 @@ function ManageMembersDialog({
                   )}
                 </div>
                 {isAdmin && member.role !== "admin" && (
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    onClick={() => setConfirmRemoveId(member.userId)}
-                    disabled={removing}
-                  >
-                    Xóa
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setConfirmTransferId(member.userId)}
+                      disabled={transferring || removing}
+                    >
+                      Chuyển admin
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => setConfirmRemoveId(member.userId)}
+                      disabled={removing || transferring}
+                    >
+                      Xóa
+                    </Button>
+                  </div>
                 )}
               </div>
             ))
           )}
         </div>
+        {confirmTransferId && (
+          <div className="p-3 border border-blue-200 rounded-md bg-blue-50">
+            <p className="mb-2 text-sm text-blue-800">
+              Chuyển quyền admin cho thành viên này?
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setConfirmTransferId(null)}
+                disabled={transferring}
+              >
+                Hủy
+              </Button>
+              <Button
+                size="sm"
+                onClick={() => {
+                  onTransferAdmin(confirmTransferId);
+                  setConfirmTransferId(null);
+                }}
+                disabled={transferring}
+              >
+                {transferring ? "Đang chuyển..." : "Xác nhận"}
+              </Button>
+            </div>
+          </div>
+        )}
         {confirmRemoveId && (
           <div className="p-3 border border-red-200 rounded-md bg-red-50">
             <p className="mb-2 text-sm text-red-800">

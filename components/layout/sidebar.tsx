@@ -21,8 +21,7 @@ const getCurrentMessageCount = (conversations: Array<{ unreadCount?: number }>) 
     0,
   );
 
-  // Fallback về tổng số cuộc trò chuyện nếu API chưa trả unreadCount.
-  return unreadTotal > 0 ? unreadTotal : conversations.length;
+  return unreadTotal;
 };
 
 const getCurrentNotificationCount = (

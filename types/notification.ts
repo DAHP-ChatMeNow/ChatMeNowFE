@@ -25,6 +25,12 @@ export interface Notification {
   targetUrl?: string;
   type: string;
   referenced?: string | NotificationReferenced;
+  metadata?: {
+    requestId?: string;
+    conversationId?: string;
+    memberIds?: string[];
+    status?: string;
+  };
   message: string;
   isRead: boolean;
   createdAt: Date | string;
