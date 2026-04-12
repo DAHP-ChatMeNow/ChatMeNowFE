@@ -57,6 +57,7 @@ import {
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import { AccountStatus } from "@/types/user";
 import { UpdateAccountStatusPayload } from "@/api/user";
+import { FriendsDialog } from "./friends-dialog";
 
 const LIMIT_OPTIONS = [20];
 
@@ -87,6 +88,8 @@ export default function AdminUsersPage() {
   const [isStatusFixed, setIsStatusFixed] = useState(false);
   const [statusReasonInput, setStatusReasonInput] = useState("");
   const [suspendedUntilInput, setSuspendedUntilInput] = useState("");
+  const [isFriendsDialogOpen, setIsFriendsDialogOpen] = useState(false);
+  const [selectedFriendsUser, setSelectedFriendsUser] = useState<AdminUser | null>(null);
 
   const activeQueryParams = {
     offset,
@@ -574,6 +577,16 @@ export default function AdminUsersPage() {
                                 Mở lại tài khoản
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedFriendsUser(user);
+                                setIsFriendsDialogOpen(true);
+                              }}
+                              className="gap-2 cursor-pointer text-blue-600 dark:text-blue-400"
+                            >
+                              <Users className="w-4 h-4" />
+                              Quản lý bạn bè
+                            </DropdownMenuItem>
                             {currentAccountStatus !== "locked" && (
                               <>
                                 <DropdownMenuItem
@@ -944,6 +957,13 @@ export default function AdminUsersPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Friends Management Dialog */}
+      <FriendsDialog
+        user={selectedFriendsUser}
+        isOpen={isFriendsDialogOpen}
+        onOpenChange={setIsFriendsDialogOpen}
+      />
     </div>
   );
 }
