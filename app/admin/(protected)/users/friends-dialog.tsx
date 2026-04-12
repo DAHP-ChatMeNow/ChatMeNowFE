@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminService, AdminUser } from "@/api/admin";
@@ -100,7 +102,7 @@ export function FriendsDialog({ user, isOpen, onOpenChange }: FriendsDialogProps
                     size="sm"
                     className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 dark:border-rose-900/50 dark:hover:bg-rose-950/40 shrink-0"
                     onClick={() => {
-                      if (window.confirm(\`Bạn có chắc muốn xóa \${friend.displayName} khỏi danh sách bạn bè của \${user?.displayName}?\`)) {
+                      if (window.confirm(`Bạn có chắc muốn xóa ${friend.displayName} khỏi danh sách bạn bè của ${user?.displayName}?`)) {
                         removeFriend(friend._id);
                       }
                     }}
