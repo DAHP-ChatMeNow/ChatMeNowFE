@@ -102,6 +102,23 @@ const updateUserAccountStatus = async (
   return userService.updateAccountStatus(userId, payload);
 };
 
+const getUserFriends = async (userId: string) => {
+  const { data } = await api.get<{
+    success: boolean;
+    friends: any[];
+    total: number;
+  }>(`/users/${userId}/contacts`);
+  return data;
+};
+
+const removeUserFriend = async (userId: string, friendId: string) => {
+  const { data } = await api.delete<{
+    success: boolean;
+    message: string;
+  }>(`/admin/users/${userId}/friends/${friendId}`);
+  return data;
+};
+
 // ===================== Posts =====================
 export interface AdminPost {
   _id: string;
@@ -410,6 +427,8 @@ export const adminService = {
   getUsers,
   toggleUserActive,
   updateUserAccountStatus,
+  getUserFriends,
+  removeUserFriend,
   getPosts,
   getPostDetail,
   getPostLikes,
