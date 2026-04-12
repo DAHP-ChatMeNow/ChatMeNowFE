@@ -10,7 +10,7 @@ export interface LastMessage {
   senderId?: string;
   senderSource?: "user" | "ai";
   senderName?: string;
-  type?: string;
+  pinManagementEnabled?: boolean;
   callInfo?: {
     status?: string;
     duration?: number;
@@ -29,6 +29,8 @@ export interface Conversation {
   isAiAssistant?: boolean;
   name?: string;
   groupAvatar?: string;
+  pinManagementEnabled?: boolean;
+  joinApprovalEnabled?: boolean;
   members: ConversationMember[];
   lastMessage?: LastMessage;
   unreadCount?: number;
