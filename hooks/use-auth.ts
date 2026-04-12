@@ -9,9 +9,11 @@ import {
   authService,
   LoginPayload,
   RegisterPayload,
+  SendOtpPayload,
+  VerifyOtpPayload,
+  OtpResponse,
   AuthResponse,
 } from "@/api/auth";
-import { userService } from "@/api/user";
 import {
   RememberedLoginPayload,
   RevokeRememberedAccountPayload,
@@ -19,6 +21,7 @@ import {
 import { useAuthStore } from "@/store/use-auth-store";
 import { useEffect } from "react";
 import { getDefaultRouteForClient } from "@/lib/default-route";
+import { userService } from "@/api/user";
 
 const getErrorMessage = (error: unknown) => {
   if (isAxiosError(error)) {
@@ -149,6 +152,30 @@ export const useAdminLogin = () => {
   });
 };
 
+export const useSendOtp = () => {
+  return useMutation<OtpResponse, unknown, SendOtpPayload>({
+    mutationFn: authService.sendOtp,
+    onSuccess: (data) => {
+      toast.success(data.message ?? "Mã OTP đã được gửi!");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+};
+
+export const useVerifyOtp = () => {
+  return useMutation<OtpResponse, unknown, VerifyOtpPayload>({
+    mutationFn: authService.verifyOtp,
+    onSuccess: (data) => {
+      toast.success(data.message ?? "Xác thực OTP thành công!");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+};
+
 export const useRegister = () => {
   const router = useRouter();
 
@@ -192,6 +219,9 @@ export const useMe = () => {
 
 export const useRememberedLogin = () => {
   const setAuth = useAuthStore((state) => state.setAuth);
+  const removeRememberedAccount = useAuthStore(
+    (state) => state.removeRememberedAccount,
+  );
   const router = useRouter();
 
   return useMutation<AuthResponse, unknown, RememberedLoginPayload>({
@@ -204,7 +234,8 @@ export const useRememberedLogin = () => {
       setAuth(data.user, data.token, data.role, data.rememberToken);
       router.push(getDefaultRouteForClient());
     },
-    onError: (error) => {
+    onError: (error, variables) => {
+      removeRememberedAccount(variables.rememberToken);
       toast.error(getErrorMessage(error));
     },
   });

@@ -57,6 +57,7 @@ import {
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import { AccountStatus } from "@/types/user";
 import { UpdateAccountStatusPayload } from "@/api/user";
+import { FriendsDialog } from "./friends-dialog";
 
 const LIMIT_OPTIONS = [20];
 
@@ -87,6 +88,8 @@ export default function AdminUsersPage() {
   const [isStatusFixed, setIsStatusFixed] = useState(false);
   const [statusReasonInput, setStatusReasonInput] = useState("");
   const [suspendedUntilInput, setSuspendedUntilInput] = useState("");
+  const [isFriendsDialogOpen, setIsFriendsDialogOpen] = useState(false);
+  const [selectedFriendsUser, setSelectedFriendsUser] = useState<AdminUser | null>(null);
 
   const activeQueryParams = {
     offset,
@@ -527,11 +530,10 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-4 py-3">
                         <Badge
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${
-                            user.role === "admin"
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium border ${user.role === "admin"
                               ? "bg-blue-50 text-blue-700 border-blue-300 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/40"
                               : "bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-700 dark:text-slate-300 dark:border-slate-600"
-                          }`}
+                            }`}
                         >
                           {user.role === "admin" ? (
                             <ShieldCheck className="w-3.5 h-3.5" />
@@ -575,6 +577,16 @@ export default function AdminUsersPage() {
                                 Mở lại tài khoản
                               </DropdownMenuItem>
                             )}
+                            <DropdownMenuItem
+                              onClick={() => {
+                                setSelectedFriendsUser(user);
+                                setIsFriendsDialogOpen(true);
+                              }}
+                              className="gap-2 cursor-pointer text-blue-600 dark:text-blue-400"
+                            >
+                              <Users className="w-4 h-4" />
+                              Quản lý bạn bè
+                            </DropdownMenuItem>
                             {currentAccountStatus !== "locked" && (
                               <>
                                 <DropdownMenuItem
@@ -935,17 +947,23 @@ export default function AdminUsersPage() {
               type="button"
               onClick={handleSubmitAccountStatus}
               disabled={isUpdatingAccountStatus}
-              className={`${
-                nextAccountStatus === "active"
+              className={`${nextAccountStatus === "active"
                   ? "bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-700 dark:hover:bg-emerald-600"
                   : "bg-rose-600 hover:bg-rose-700 dark:bg-rose-700 dark:hover:bg-rose-600"
-              }`}
+                }`}
             >
               {isUpdatingAccountStatus ? "Đang cập nhật..." : "Xác nhận cập nhật"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Friends Management Dialog */}
+      <FriendsDialog
+        user={selectedFriendsUser}
+        isOpen={isFriendsDialogOpen}
+        onOpenChange={setIsFriendsDialogOpen}
+      />
     </div>
   );
 }
