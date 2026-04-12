@@ -7,6 +7,7 @@ export interface ConversationMember {
 
 export interface LastMessage {
   content?: string;
+  type?: string;
   senderId?: string;
   senderSource?: "user" | "ai";
   senderName?: string;
