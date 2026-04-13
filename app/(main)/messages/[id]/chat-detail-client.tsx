@@ -47,6 +47,7 @@ import {
   useSendAiMessage,
   useSendMessage,
   useConversationDisplay,
+  useReactToMessage,
 } from "@/hooks/use-chat";
 import {
   useGetFriendProfile,
@@ -1207,6 +1208,7 @@ export default function ChatDetailClient() {
     useUnsendMessage();
   const { mutate: pinMessage, isPending: isPinPending } = usePinMessage();
   const { mutate: unpinMessage, isPending: isUnpinPending } = useUnpinMessage();
+  const { mutate: reactToMessage } = useReactToMessage();
   const { mutate: deleteMessageForMe, isPending: isDeletePending } =
     useDeleteMessageForMe();
   const queryClient = useQueryClient();
@@ -1233,6 +1235,8 @@ export default function ChatDetailClient() {
   const [activeMessageActionsId, setActiveMessageActionsId] = useState<
     string | null
   >(null);
+  const [reactionPickerMessageId, setReactionPickerMessageId] = useState<string | null>(null);
+  const reactionPickerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -1738,6 +1742,54 @@ export default function ChatDetailClient() {
 
     return () => {
       socket.current?.off("conversation:pinned-updated", handlePinnedUpdated);
+    };
+  }, [conversationId, queryClient, socket]);
+
+  // ── Real-time reaction sync ──────────────────────────────────────────────
+  useEffect(() => {
+    if (!socket.current || !conversationId) return;
+
+    const patchMessageInCache = (updatedMsg: any) => {
+      const msgId = String(updatedMsg?.id || updatedMsg?._id || "");
+      if (!msgId) return;
+
+      queryClient.setQueryData<MessagesResponse>(
+        ["messages", conversationId],
+        (old) => {
+          if (!old) return old;
+          return {
+            ...old,
+            messages: old.messages.map((m) => {
+              const mId = String((m as any).id || (m as any)._id || "");
+              if (mId !== msgId) return m;
+              return {
+                ...m,
+                reactions: updatedMsg.reactions ?? m.reactions,
+                isEdited: updatedMsg.isEdited ?? m.isEdited,
+                content: updatedMsg.content ?? m.content,
+                isUnsent: updatedMsg.isUnsent ?? m.isUnsent,
+                unsentAt: updatedMsg.unsentAt ?? (m as any).unsentAt,
+              };
+            }),
+          };
+        },
+      );
+    };
+
+    const handleMessageReaction = (updatedMsg: any) => {
+      patchMessageInCache(updatedMsg);
+    };
+
+    const handleMessageUpdated = (updatedMsg: any) => {
+      patchMessageInCache(updatedMsg);
+    };
+
+    socket.current.on("message:reaction", handleMessageReaction);
+    socket.current.on("message:updated", handleMessageUpdated);
+
+    return () => {
+      socket.current?.off("message:reaction", handleMessageReaction);
+      socket.current?.off("message:updated", handleMessageUpdated);
     };
   }, [conversationId, queryClient, socket]);
 
@@ -2362,6 +2414,21 @@ export default function ChatDetailClient() {
                     unpinMessage({ conversationId, messageId });
                   };
 
+                  const EMOTE_MAP: Record<string, string> = {
+                    like: "👍", love: "❤️", haha: "😂",
+                    sad: "😢", angry: "😠", wow: "😮",
+                  };
+                  const reactionSummary = (msg.reactions || []).reduce<
+                    Record<string, { count: number; users: string[] }>
+                  >((acc, r: any) => {
+                    const k = r.emoji as string;
+                    if (!acc[k]) acc[k] = { count: 0, users: [] };
+                    acc[k].count++;
+                    acc[k].users.push(String(r.userId));
+                    return acc;
+                  }, {});
+                  const hasReactions = Object.keys(reactionSummary).length > 0;
+
                   return (
                     <Fragment key={messageId}>
                       {shouldRenderUnreadBanner && (
@@ -2547,6 +2614,72 @@ export default function ChatDetailClient() {
                                     {isPinned ? "Bỏ ghim" : "Ghim"}
                                   </button>
                                 )}
+                                {/* Emote button — inline like reply/pin */}
+                                {!isUnsent && messageId && (
+                                  <div
+                                    data-reaction-scope="true"
+                                    className="relative"
+                                  >
+                                    <button
+                                      type="button"
+                                      title="Thả emote"
+                                      onClick={() =>
+                                        setReactionPickerMessageId(
+                                          reactionPickerMessageId === messageId ? null : messageId,
+                                        )
+                                      }
+                                      className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] transition ${
+                                        reactionPickerMessageId === messageId
+                                          ? "bg-yellow-100 text-yellow-600"
+                                          : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
+                                      }`}
+                                    >
+                                      😊
+                                    </button>
+                                    {reactionPickerMessageId === messageId && (
+                                      <div
+                                        className="absolute bottom-7 left-0 z-30 flex items-end gap-1 px-2 py-1.5 bg-white rounded-2xl shadow-xl border border-slate-100"
+                                        onMouseLeave={() => setReactionPickerMessageId(null)}
+                                      >
+                                        {([
+                                          { key: "like", label: "Thích", emoji: "👍" },
+                                          { key: "love", label: "Yêu thích", emoji: "❤️" },
+                                          { key: "haha", label: "Haha", emoji: "😂" },
+                                          { key: "sad", label: "Khóc", emoji: "😢" },
+                                          { key: "angry", label: "Tức giận", emoji: "😠" },
+                                          { key: "wow", label: "Lo lắng", emoji: "😮" },
+                                        ] as const).map((opt) => {
+                                          const myReaction = (msg.reactions || []).find(
+                                            (r: any) => r.userId === currentUserId,
+                                          );
+                                          return (
+                                            <button
+                                              key={opt.key}
+                                              type="button"
+                                              title={opt.label}
+                                              onClick={() => {
+                                                reactToMessage({
+                                                  conversationId,
+                                                  messageId,
+                                                  emoji: opt.key,
+                                                });
+                                                setReactionPickerMessageId(null);
+                                              }}
+                                              className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded-xl transition-all duration-100 hover:scale-125 ${
+                                                myReaction?.emoji === opt.key
+                                                  ? "bg-blue-50 ring-2 ring-blue-300 scale-110"
+                                                  : "hover:bg-slate-50"
+                                              }`}
+                                            >
+                                              <span className="text-xl leading-none">{opt.emoji}</span>
+                                              <span className="text-[9px] text-slate-500 font-medium">{opt.label}</span>
+                                            </button>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
                               </div>
                               {statusText && (
                                 <div
@@ -2585,6 +2718,73 @@ export default function ChatDetailClient() {
                                 >
                                   {statusText}
                                 </span>
+                              )}
+
+                              {/* Emote button for my messages — inline before 3-dot */}
+                              {!isUnsent && messageId && (
+                                <div
+                                  data-reaction-scope="true"
+                                  className="relative"
+                                >
+                                  <button
+                                    type="button"
+                                    title="Thả emote"
+                                    onClick={() =>
+                                      setReactionPickerMessageId(
+                                        reactionPickerMessageId === messageId ? null : messageId,
+                                      )
+                                    }
+                                    className={`inline-flex items-center rounded-full p-1 text-sm transition-all duration-150 ${outgoingActionClass} ${
+                                      reactionPickerMessageId === messageId
+                                        ? "opacity-100 pointer-events-auto"
+                                        : "opacity-0 pointer-events-none group-hover:opacity-100 group-hover:pointer-events-auto"
+                                    }`}
+                                  >
+                                    😊
+                                  </button>
+                                  {reactionPickerMessageId === messageId && (
+                                    <div
+                                      className="absolute bottom-8 right-0 z-30 flex items-end gap-1 px-2 py-1.5 bg-white rounded-2xl shadow-xl border border-slate-100"
+                                      onMouseLeave={() => setReactionPickerMessageId(null)}
+                                    >
+                                      {([
+                                        { key: "like", label: "Thích", emoji: "👍" },
+                                        { key: "love", label: "Yêu thích", emoji: "❤️" },
+                                        { key: "haha", label: "Haha", emoji: "😂" },
+                                        { key: "sad", label: "Khóc", emoji: "😢" },
+                                        { key: "angry", label: "Tức giận", emoji: "😠" },
+                                        { key: "wow", label: "Lo lắng", emoji: "😮" },
+                                      ] as const).map((opt) => {
+                                        const myReaction = (msg.reactions || []).find(
+                                          (r: any) => r.userId === currentUserId,
+                                        );
+                                        return (
+                                          <button
+                                            key={opt.key}
+                                            type="button"
+                                            title={opt.label}
+                                            onClick={() => {
+                                              reactToMessage({
+                                                conversationId,
+                                                messageId,
+                                                emoji: opt.key,
+                                              });
+                                              setReactionPickerMessageId(null);
+                                            }}
+                                            className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded-xl transition-all duration-100 hover:scale-125 ${
+                                              myReaction?.emoji === opt.key
+                                                ? "bg-blue-50 ring-2 ring-blue-300 scale-110"
+                                                : "hover:bg-slate-50"
+                                            }`}
+                                          >
+                                            <span className="text-xl leading-none">{opt.emoji}</span>
+                                            <span className="text-[9px] text-slate-500 font-medium">{opt.label}</span>
+                                          </button>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
                               )}
 
                               {canShowActions && (
@@ -2665,6 +2865,45 @@ export default function ChatDetailClient() {
                           )}
                         </div>
                       </div>
+
+                      {/* ── Reaction badges below bubble ── */}
+                      {hasReactions && (
+                        <div
+                          className={`flex flex-wrap gap-1 ${
+                            isMe
+                              ? "justify-end pr-10"
+                              : "justify-start pl-10"
+                          } -mt-1 mb-0.5`}
+                        >
+                          {Object.entries(reactionSummary).map(([emoji, data]) => {
+                            const isMine = data.users.includes(currentUserId || "");
+                            return (
+                              <button
+                                key={emoji}
+                                type="button"
+                                title={`${data.count}`}
+                                onClick={() => {
+                                  if (!messageId) return;
+                                  reactToMessage({ conversationId, messageId, emoji });
+                                }}
+                                className={`inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-medium transition-all duration-150 hover:scale-110 shadow-sm border ${
+                                  isMine
+                                    ? "bg-blue-100 border-blue-300 text-blue-700"
+                                    : "bg-white border-slate-200 text-slate-600"
+                                }`}
+                              >
+                                <span className="text-sm leading-none">
+                                  {EMOTE_MAP[emoji] || emoji}
+                                </span>
+                                {data.count > 1 && (
+                                  <span>{data.count}</span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
                     </Fragment>
                   );
                 })}

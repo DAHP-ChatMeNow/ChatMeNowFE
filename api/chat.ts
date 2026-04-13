@@ -513,7 +513,7 @@ export const chatService = {
     messageId: string,
   ): Promise<PinnedMessagesResponse> => {
     const res = await api.post<any>(
-      `/chat/conversations/${conversationId}/pinned-messages/${messageId}`,
+      `/chat/conversations/${conversationId}/messages/${messageId}/pin`,
     );
     return normalizePinnedMessagesPayload(res.data);
   },
@@ -523,7 +523,7 @@ export const chatService = {
     messageId: string,
   ): Promise<PinnedMessagesResponse> => {
     const res = await api.delete<any>(
-      `/chat/conversations/${conversationId}/pinned-messages/${messageId}`,
+      `/chat/conversations/${conversationId}/messages/${messageId}/pin`,
     );
     return normalizePinnedMessagesPayload(res.data);
   },
@@ -681,6 +681,12 @@ export const chatService = {
       content,
     });
     return pickMessagePayload(res.data);
+  },
+
+  reactToMessage: async (messageId: string, emoji: string): Promise<Message> => {
+    const res = await api.post<any>(`/chat/messages/${messageId}/react`, { emoji });
+    const raw = res.data?.message || res.data;
+    return mapMongoId(raw);
   },
 
   // Gửi tin nhắn tới AI và nhận phản hồi ngay trong response
