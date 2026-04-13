@@ -50,6 +50,7 @@ import {
   createFriendCardAttachment,
   FriendCardPayload,
 } from "@/lib/friend-card";
+import { buildPublicAppUrl } from "@/types/utils";
 import { useProfilePosts } from "@/hooks/use-post";
 import { Post, PostMedia } from "@/types/post";
 import { getPostPrivacyLabel } from "@/lib/post-privacy";
@@ -153,7 +154,7 @@ export default function FriendProfilePage() {
       displayName: friend.displayName,
       avatar: friend.avatar,
       email: friendEmail.email,
-      profileUrl: `/profile/${friend.id}`,
+      profileUrl: buildPublicAppUrl(`/profile?userId=${friend.id}`),
     };
 
     await sendMessage({

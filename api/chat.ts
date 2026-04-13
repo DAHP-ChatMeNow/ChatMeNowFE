@@ -511,7 +511,7 @@ export const chatService = {
     messageId: string,
   ): Promise<PinnedMessagesResponse> => {
     const res = await api.post<any>(
-      `/chat/conversations/${conversationId}/messages/${messageId}/pin`,
+      `/chat/conversations/${conversationId}/pinned-messages/${messageId}`,
     );
     return normalizePinnedMessagesPayload(res.data);
   },
@@ -521,7 +521,7 @@ export const chatService = {
     messageId: string,
   ): Promise<PinnedMessagesResponse> => {
     const res = await api.delete<any>(
-      `/chat/conversations/${conversationId}/messages/${messageId}/pin`,
+      `/chat/conversations/${conversationId}/pinned-messages/${messageId}`,
     );
     return normalizePinnedMessagesPayload(res.data);
   },

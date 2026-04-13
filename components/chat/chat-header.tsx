@@ -90,14 +90,17 @@ import { Message, MessageAttachment } from "@/types/message";
 import { FRIEND_CARD_ATTACHMENT_TYPE } from "@/lib/friend-card";
 import {
   createGroupCardAttachment,
+  GROUP_CARD_ATTACHMENT_TYPE,
   type GroupCardPayload,
 } from "../../lib/group-card";
+import { isShareCardSource } from "@/lib/share-card";
 import { User } from "@/types/user";
 import { UnreadSummaryDialog } from "@/components/chat/unread-summary-dialog";
 import { usePresignedUrl } from "@/hooks/use-profile";
 import { chatService, type PinnedMessageItem } from "@/api/chat";
 import { toast } from "sonner";
 import { QRCodeCanvas } from "qrcode.react";
+import { buildPublicAppUrl } from "@/types/utils";
 
 type ChatBackgroundKey = "default" | "sky" | "sunset" | "mint" | "night";
 
@@ -567,8 +570,7 @@ export function ChatHeader({
 
   const groupShareLink = useMemo(() => {
     if (!currentId) return "";
-    if (typeof window === "undefined") return `/messages/${currentId}`;
-    return new URL(`/messages/${currentId}`, window.location.origin).toString();
+    return buildPublicAppUrl(`/messages?conversationId=${currentId}`);
   }, [currentId]);
 
   const groupCardPayload = useMemo<GroupCardPayload | null>(() => {
@@ -579,7 +581,7 @@ export function ChatHeader({
       displayName,
       avatar: headerAvatarKey || undefined,
       memberCount: conversation?.members?.length || groupMembers.length + 1,
-      profileUrl: `/messages/${currentId}`,
+      profileUrl: buildPublicAppUrl(`/messages?conversationId=${currentId}`),
     };
   }, [
     conversation?.members?.length,
@@ -1415,11 +1417,15 @@ function MessagesSideSheet({
 
         (message.attachments || []).forEach(
           (attachment: MessageAttachment, attachmentIndex: number) => {
-            if (attachment.fileType === FRIEND_CARD_ATTACHMENT_TYPE) {
+            const source = attachment.key || attachment.url || "";
+            if (
+              attachment.fileType === FRIEND_CARD_ATTACHMENT_TYPE ||
+              attachment.fileType === GROUP_CARD_ATTACHMENT_TYPE ||
+              isShareCardSource(source)
+            ) {
               return;
             }
 
-            const source = attachment.key || attachment.url || "";
             if (!source) return;
 
             collected.push({
@@ -1469,7 +1475,13 @@ function MessagesSideSheet({
     const map = new Map<string, CachedFileItem>();
 
     cachedFiles.forEach((item) => {
-      if (item?.fileType === FRIEND_CARD_ATTACHMENT_TYPE) return;
+      if (
+        item?.fileType === FRIEND_CARD_ATTACHMENT_TYPE ||
+        item?.fileType === GROUP_CARD_ATTACHMENT_TYPE ||
+        isShareCardSource(item?.source)
+      ) {
+        return;
+      }
       if (item?.id && item?.source) map.set(item.id, item);
     });
     fromCurrentMessages.forEach((item) => map.set(item.id, item));
