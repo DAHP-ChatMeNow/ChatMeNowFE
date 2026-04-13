@@ -117,6 +117,19 @@ type RealtimeDeleteForMePayload = {
   };
 };
 
+type RealtimePinnedMessageItem = {
+  messageId?: string;
+  pinnedAt?: string;
+  pinnedBy?: string;
+  message?: Partial<Message> & { _id?: string };
+};
+
+type RealtimePinnedMessagesPayload = {
+  conversationId?: string;
+  pinnedMessages?: RealtimePinnedMessageItem[];
+  latestPinnedMessage?: (Partial<Message> & { _id?: string }) | null;
+};
+
 const getMessageSenderId = (message: Message): string | undefined => {
   if (!message.senderId) return undefined;
 
@@ -146,6 +159,55 @@ const normalizeRealtimeMessage = (
     conversationId: normalizedConversationId,
     status: "sent",
     isOptimistic: false,
+  };
+};
+
+const normalizeRealtimePinnedMessages = (
+  payload: RealtimePinnedMessagesPayload,
+) => {
+  const pinnedMessages = Array.isArray(payload?.pinnedMessages)
+    ? payload.pinnedMessages
+        .map((item) => {
+          const message = item?.message
+            ? ({
+                ...(item.message as Message),
+                id: item.message.id || item.message._id,
+                _id: item.message._id || item.message.id,
+              } as Message)
+            : null;
+
+          if (!message) return null;
+
+          const messageId = String(
+            item?.messageId || message.id || message._id || "",
+          );
+
+          if (!messageId) return null;
+
+          return {
+            messageId,
+            pinnedAt: item?.pinnedAt ? String(item.pinnedAt) : undefined,
+            pinnedBy: item?.pinnedBy ? String(item.pinnedBy) : undefined,
+            message,
+          };
+        })
+        .filter(Boolean)
+    : [];
+
+  const latestPinnedMessage = payload?.latestPinnedMessage
+    ? ({
+        ...(payload.latestPinnedMessage as Message),
+        id:
+          payload.latestPinnedMessage.id || payload.latestPinnedMessage._id,
+        _id:
+          payload.latestPinnedMessage._id || payload.latestPinnedMessage.id,
+      } as Message)
+    : pinnedMessages[0]?.message || null;
+
+  return {
+    success: true,
+    pinnedMessages,
+    latestPinnedMessage,
   };
 };
 
@@ -368,6 +430,35 @@ export function SocketProvider({ children }: SocketProviderProps) {
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
     };
 
+    const handlePinnedMessagesUpdated = (
+      payload: RealtimePinnedMessagesPayload,
+    ) => {
+      const conversationId = String(payload?.conversationId || "").trim();
+      if (!conversationId) return;
+
+      const normalizedPayload = normalizeRealtimePinnedMessages(payload);
+
+      queryClient.setQueryData(
+        ["pinned-messages", conversationId],
+        normalizedPayload,
+      );
+
+      queryClient.setQueryData(
+        ["conversation", conversationId],
+        (oldConversation: any) => {
+          if (!oldConversation) return oldConversation;
+
+          return {
+            ...oldConversation,
+            pinnedMessages: normalizedPayload.pinnedMessages,
+            latestPinnedMessage: normalizedPayload.latestPinnedMessage,
+          };
+        },
+      );
+
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+    };
+
     socketInstance.on("message:new", handleRealtimeMessage);
     socketInstance.on("newMessage", handleRealtimeMessage);
     socketInstance.on("message:updated", handleRealtimeMessageUpdated);
@@ -375,6 +466,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
     socketInstance.on("message:unsent", handleRealtimeMessageUpdated);
     socketInstance.on("message:reaction", handleRealtimeMessageUpdated);
     socketInstance.on("message:deleted-for-me", handleRealtimeDeletedForMe);
+    socketInstance.on("conversation:pinned-updated", handlePinnedMessagesUpdated);
 
     const handleNotification = (notification: RealtimeNotificationPayload) => {
       queryClient.setQueryData<NotificationsResponse | undefined>(
@@ -463,6 +555,7 @@ export function SocketProvider({ children }: SocketProviderProps) {
       socketInstance.off("message:unsent", handleRealtimeMessageUpdated);
       socketInstance.off("message:reaction", handleRealtimeMessageUpdated);
       socketInstance.off("message:deleted-for-me", handleRealtimeDeletedForMe);
+      socketInstance.off("conversation:pinned-updated", handlePinnedMessagesUpdated);
       socketInstance.off("notification", handleNotification);
       socketInstance.off("notification:new");
       socketInstance.off("user:presence", handleUserPresence);
