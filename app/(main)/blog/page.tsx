@@ -353,7 +353,7 @@ export default function BlogPage() {
     e.target.value = "";
   };
 
-  const confirmCreateStory = () => {
+  const confirmCreateStory = (opts: { musicUrl?: string | null; musicTitle?: string | null; musicArtist?: string | null } = {}) => {
     if (!pendingStoryFile) return;
 
     createStory(
@@ -361,6 +361,9 @@ export default function BlogPage() {
         mediaFile: pendingStoryFile,
         privacy: storyPrivacy,
         videoDuration: pendingStoryVideoDuration,
+        musicUrl: opts.musicUrl ?? null,
+        musicTitle: opts.musicTitle ?? null,
+        musicArtist: opts.musicArtist ?? null,
       },
       {
         onSettled: () => {
@@ -455,10 +458,10 @@ export default function BlogPage() {
         const next = prev.map((message) =>
           message.id === pendingMessageId
             ? {
-                ...message,
-                content: userContent || message.content,
-                status: "sent" as const,
-              }
+              ...message,
+              content: userContent || message.content,
+              status: "sent" as const,
+            }
             : message,
         );
 
@@ -673,9 +676,8 @@ export default function BlogPage() {
                             key={friendId}
                             type="button"
                             onClick={() => toggleCustomAudience(friendId)}
-                            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${
-                              checked ? "bg-blue-50 text-blue-700" : "hover:bg-slate-100"
-                            }`}
+                            className={`flex w-full items-center justify-between rounded-lg px-2 py-1.5 text-left transition-colors ${checked ? "bg-blue-50 text-blue-700" : "hover:bg-slate-100"
+                              }`}
                           >
                             <span className="flex items-center gap-2 min-w-0">
                               <PresignedAvatar
@@ -688,11 +690,10 @@ export default function BlogPage() {
                               </span>
                             </span>
                             <span
-                              className={`h-4 w-4 rounded border ${
-                                checked
+                              className={`h-4 w-4 rounded border ${checked
                                   ? "border-blue-600 bg-blue-600"
                                   : "border-slate-300 bg-white"
-                              }`}
+                                }`}
                             >
                               {checked ? (
                                 <Check className="h-3.5 w-3.5 text-white" />
@@ -912,7 +913,7 @@ export default function BlogPage() {
                   canManage={
                     normalizedCurrentUserId !== "" &&
                     normalizeId(post.author?._id || post.author?.id || post.authorId) ===
-                      normalizedCurrentUserId
+                    normalizedCurrentUserId
                   }
                   onOpenAuthorProfile={() => handleOpenAuthorProfile(post)}
                   isExpanded={expandedPostId === post.id}
@@ -1414,9 +1415,8 @@ function ProfilePostCard({
       <div className="flex mx-0 mt-1 border-t border-slate-100">
         <button
           onClick={onLike}
-          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-none hover:bg-slate-50 transition-colors ${
-            post.isLikedByCurrentUser ? "text-red-500" : "text-slate-500"
-          }`}
+          className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-semibold rounded-none hover:bg-slate-50 transition-colors ${post.isLikedByCurrentUser ? "text-red-500" : "text-slate-500"
+            }`}
         >
           <Heart
             className={`w-4 h-4 ${post.isLikedByCurrentUser ? "fill-red-500" : ""}`}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X, ChevronLeft, ChevronRight, Trash2, Send } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Trash2, Send, Music2, Volume2, VolumeX } from "lucide-react";
 import { Story, StoryGroup } from "@/types/story";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import {
@@ -44,6 +44,7 @@ export function StoryViewer({
   const progressTimerRef = useRef<NodeJS.Timeout | null>(null);
   const autoNextTimerRef = useRef<NodeJS.Timeout | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const musicAudioRef = useRef<HTMLAudioElement | null>(null);
   const addReactionMutation = useAddReaction();
   const replyToStoryMutation = useReplyToStory();
   const deleteReplyMutation = useDeleteReply();
@@ -163,6 +164,50 @@ export function StoryViewer({
     return clearTimers;
   }, [open, activeStory?.id]);
 
+  const [isMuted, setIsMuted] = useState(false);
+
+  // ── Music auto-play ───────────────────────────────────────────────────────
+  useEffect(() => {
+    const audio = musicAudioRef.current;
+    if (!audio) return;
+
+    if (!open || !activeStory?.musicUrl) {
+      audio.pause();
+      return;
+    }
+
+    audio.src = activeStory.musicUrl;
+    audio.loop = true;
+    audio.volume = 0.5;
+    audio.muted = isMuted;
+
+    // We only attempt to play if it's open and there's a url
+    audio.play().catch((err) => {
+      // If browser blocks autoplay, we'll gracefully fallback by muting it
+      // so it at least plays silently, allowing user to unmute to hear it.
+      if (err.name === "NotAllowedError") {
+        audio.muted = true;
+        setIsMuted(true);
+        audio.play().catch(() => { });
+      }
+    });
+
+    return () => {
+      audio.pause();
+      audio.src = "";
+    };
+  }, [open, activeStory?.id, activeStory?.musicUrl]);
+
+  // Handle manual mute toggle
+  useEffect(() => {
+    if (musicAudioRef.current) {
+      musicAudioRef.current.muted = isMuted;
+    }
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
   useEffect(() => {
     if (!open) return;
 
@@ -181,6 +226,12 @@ export function StoryViewer({
       window.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prev;
       clearTimers();
+      // Stop music when viewer unmounts / closes
+      if (musicAudioRef.current) {
+        musicAudioRef.current.pause();
+        musicAudioRef.current.src = "";
+        musicAudioRef.current = null;
+      }
     };
   }, [open, goNext, goPrev, onClose]);
 
@@ -194,9 +245,9 @@ export function StoryViewer({
   return (
     <div className="fixed inset-0 z-[90] bg-black/95">
       <div className="absolute top-0 left-0 right-0 z-10 p-3 md:p-4">
-        <div className="grid grid-cols-1 gap-1.5">
+        <div className="flex items-center gap-1">
           {activeGroup.stories.map((story, index) => (
-            <div key={story.id} className="w-full h-1 rounded-full bg-white/30 overflow-hidden">
+            <div key={story.id} className="flex-1 h-1 rounded-full bg-white/30 overflow-hidden">
               <div
                 className="h-full bg-white transition-all"
                 style={{
@@ -230,6 +281,13 @@ export function StoryViewer({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Music indicator */}
+            {activeStory.musicTitle && (
+              <div className="flex items-center gap-1 bg-black/40 rounded-full px-2 py-1 max-w-[120px]">
+                <Music2 className="w-3 h-3 text-purple-300 shrink-0 animate-spin [animation-duration:3s]" />
+                <span className="text-[10px] text-white/80 truncate">{activeStory.musicTitle}</span>
+              </div>
+            )}
             {isOwnStory && onDeleteStory ? (
               <button
                 type="button"
@@ -242,6 +300,24 @@ export function StoryViewer({
             ) : null}
             <button
               type="button"
+              onClick={() => {
+                const nextMuted = !isMuted;
+                setIsMuted(nextMuted);
+                if (musicAudioRef.current) {
+                  musicAudioRef.current.muted = nextMuted;
+                  if (!nextMuted) musicAudioRef.current.play().catch(() => { });
+                }
+                if (videoRef.current) {
+                  videoRef.current.muted = nextMuted;
+                }
+              }}
+              className="p-2 rounded-full bg-white/15 hover:bg-white/25"
+              aria-label={isMuted ? "Bật âm thanh" : "Tắt âm thanh"}
+            >
+              {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+            </button>
+            <button
+              type="button"
               onClick={onClose}
               className="p-2 rounded-full bg-white/15 hover:bg-white/25"
               aria-label="Đóng story"
@@ -251,6 +327,9 @@ export function StoryViewer({
           </div>
         </div>
       </div>
+
+      {/* Hidden audio element for better mobile autoplay delegation */}
+      {activeStory?.musicUrl && <audio ref={musicAudioRef} src={activeStory.musicUrl} className="hidden" preload="auto" playsInline />}
 
       <button
         type="button"
@@ -372,20 +451,55 @@ export function StoryViewer({
             </div>
           </div>
         ) : (
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 flex-1">
-              {activeStory?.replyCount && activeStory.replyCount > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setShowReplies(true)}
-                  className="px-3 py-1.5 rounded-full bg-white/20 hover:bg-white/30 text-white text-sm font-semibold"
-                >
-                  💬 {activeStory.replyCount}
-                </button>
-              )}
+          <div className="flex items-center gap-3 w-full">
+            {/* Input field for non-authors */}
+            {!isStoryAuthor && (
+              <div className="flex-1 flex items-center bg-white rounded-full px-4 py-2.5 shadow-md focus-within:ring-2 focus-within:ring-blue-500 transition-all">
+                <input
+                  type="text"
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  onKeyPress={(e) => {
+                    if (e.key === "Enter") {
+                      handleSendReply();
+                      setReplyMessage('');
+                    }
+                  }}
+                  onFocus={() => clearTimers()}
+                  placeholder="Trả lời..."
+                  maxLength={500}
+                  className="flex-1 bg-transparent text-black placeholder-gray-500 text-sm focus:outline-none"
+                />
+                {replyMessage.trim() && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSendReply();
+                      setReplyMessage('');
+                    }}
+                    disabled={replyToStoryMutation.isPending}
+                    className="text-blue-500 hover:text-blue-600 ml-2 shrink-0 transition-colors"
+                  >
+                    <Send size={18} />
+                  </button>
+                )}
+              </div>
+            )}
 
+            {/* Author views replies count here if no input */}
+            {isStoryAuthor && activeStory?.replyCount && activeStory.replyCount > 0 ? (
+              <button
+                type="button"
+                onClick={() => setShowReplies(true)}
+                className="px-4 py-2 rounded-full bg-white/20 hover:bg-white/30 text-white text-sm font-semibold flex items-center gap-2 shrink-0"
+              >
+                <span className="text-lg">💬</span> {activeStory.replyCount}
+              </button>
+            ) : null}
+
+            <div className="flex items-center gap-2 shrink-0">
               {showReactionPicker ? (
-                <div className="flex items-center gap-1 rounded-full bg-white/20 backdrop-blur-sm p-2">
+                <div className="flex items-center gap-1.5 rounded-full bg-white/20 backdrop-blur-sm p-2 animate-in slide-in-from-right-4">
                   {REACTION_EMOJIS.map((emoji) => (
                     <button
                       key={emoji}
@@ -394,63 +508,50 @@ export function StoryViewer({
                         handleReaction(emoji);
                         setShowReactionPicker(false);
                       }}
-                      className={`text-xl p-2 rounded-full transition-all ${
-                        currentUserReactions.includes(emoji)
-                          ? "bg-white/40 scale-110"
-                          : "hover:bg-white/20"
-                      }`}
+                      className={`text-2xl p-1.5 rounded-full transition-all hover:-translate-y-2 ${currentUserReactions.includes(emoji)
+                        ? "bg-white/40 scale-110"
+                        : "hover:bg-white/20"
+                        }`}
                     >
                       {emoji}
                     </button>
                   ))}
+                  <button
+                    onClick={() => setShowReactionPicker(false)}
+                    className="ml-1 p-2 rounded-full bg-white/10 hover:bg-white/30 text-white"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
                 </div>
               ) : (
                 <>
                   {activeStory?.reactions && activeStory.reactions.length > 0 && (
-                    <div className="flex items-center gap-1 rounded-full bg-white/20 backdrop-blur-sm p-2">
-                      {activeStory.reactions.slice(0, 5).map((reaction) => (
-                        <button
-                          key={reaction.emoji}
-                          type="button"
-                          onClick={() => handleReaction(reaction.emoji)}
-                          className={`text-lg px-2 py-1 rounded-full transition-all ${
-                            currentUserReactions.includes(reaction.emoji)
-                              ? "bg-white/40"
-                              : "hover:bg-white/20"
-                          }`}
-                          title={`${reaction.users.length} người`}
-                        >
-                          <span>{reaction.emoji}</span>
-                          <span className="text-xs ml-1">{reaction.users.length}</span>
-                        </button>
+                    <div className="flex items-center gap-1 rounded-full bg-black/40 backdrop-blur-sm px-3 py-1.5 cursor-pointer" onClick={() => setShowReactionPicker(true)}>
+                      {activeStory.reactions.slice(0, 3).map((reaction) => (
+                        <span key={reaction.emoji} className="text-lg -ml-1.5 first:ml-0 drop-shadow-md">
+                          {reaction.emoji}
+                        </span>
                       ))}
+                      <span className="text-xs font-semibold text-white ml-1.5">
+                        {activeStory.reactions.reduce((sum, r) => sum + r.users.length, 0)}
+                      </span>
                     </div>
                   )}
 
                   <button
                     type="button"
                     onClick={() => setShowReactionPicker(!showReactionPicker)}
-                    className="text-2xl p-2 rounded-full bg-white/20 hover:bg-white/30 transition-all"
-                    title="React"
+                    className="p-2.5 rounded-full bg-transparent hover:bg-white/20 transition-all text-2xl"
+                    title="Thả cảm xúc"
                   >
-                    😊
+                    ❤️
                   </button>
                 </>
               )}
             </div>
-
-            {!isStoryAuthor && (
-              <button
-                type="button"
-                onClick={() => setShowReplies(true)}
-                className="px-3 py-1.5 rounded-full bg-blue-500 hover:bg-blue-600 text-white text-sm font-semibold whitespace-nowrap"
-              >
-                Reply
-              </button>
-            )}
           </div>
         )}
       </div>
-    </div>
+    </div >
   );
 }

@@ -7,6 +7,9 @@ export type CreateStoryPayload = {
   caption?: string;
   privacy?: StoryPrivacy;
   videoDuration?: number;
+  musicUrl?: string | null;
+  musicTitle?: string | null;
+  musicArtist?: string | null;
 };
 
 interface BackendStory {
@@ -19,6 +22,9 @@ interface BackendStory {
     type: "image" | "video";
     duration?: number;
   };
+  musicUrl?: string | null;
+  musicTitle?: string | null;
+  musicArtist?: string | null;
   createdAt: Date;
   expiresAt: Date;
   isViewedByCurrentUser?: boolean;
@@ -39,6 +45,9 @@ const mapStory = (story: BackendStory): Story => ({
   caption: story.caption,
   privacy: story.privacy,
   media: story.media,
+  musicUrl: story.musicUrl ?? null,
+  musicTitle: story.musicTitle ?? null,
+  musicArtist: story.musicArtist ?? null,
   createdAt: story.createdAt,
   expiresAt: story.expiresAt,
   isViewedByCurrentUser: story.isViewedByCurrentUser || false,
@@ -60,6 +69,10 @@ const createStory = async (payload: CreateStoryPayload) => {
   if (typeof payload.videoDuration === "number") {
     formData.append("videoDuration", String(payload.videoDuration));
   }
+
+  if (payload.musicUrl) formData.append("musicUrl", payload.musicUrl);
+  if (payload.musicTitle) formData.append("musicTitle", payload.musicTitle);
+  if (payload.musicArtist) formData.append("musicArtist", payload.musicArtist);
 
   const { data } = await api.post<BackendStory>("/stories", formData, {
     headers: { "Content-Type": "multipart/form-data" },
