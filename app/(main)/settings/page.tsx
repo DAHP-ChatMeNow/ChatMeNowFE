@@ -54,6 +54,12 @@ function timeAgo(date: Date | string | number) {
   return `${Math.floor(diff / 86400)} ngày trước`;
 }
 
+const toTimeValue = (value: unknown): Date | string | number => {
+  if (value instanceof Date) return value;
+  if (typeof value === "string" || typeof value === "number") return value;
+  return "";
+};
+
 const toIdString = (value: unknown): string => {
   if (!value) return "";
   if (typeof value === "string") return value.trim();
@@ -86,6 +92,17 @@ const getActivityTargetPostId = (item: unknown): string => {
     toIdString(post._id) ||
     toIdString(post.id)
   );
+};
+
+const asRecord = (value: unknown): Record<string, unknown> => {
+  if (!value || typeof value !== "object") return {};
+  return value as Record<string, unknown>;
+};
+
+const asText = (value: unknown, fallback = ""): string => {
+  if (typeof value === "string") return value;
+  if (typeof value === "number") return String(value);
+  return fallback;
 };
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
@@ -958,22 +975,39 @@ export default function SettingsPage() {
                     Chưa có video nào được xem
                   </div>
                 ) : (
-                  activityData?.viewedVideos.map((item: unknown) => (
-                    <ActivityItem
-                      key={item._id || item.id}
-                      author={item.video?.user?.displayName || item.author || "N/A"}
-                      content={item.video?.title || item.title || "Video đã xem"}
-                      time={timeAgo(item.createdAt || item.viewedAt)}
-                      icon={<PlaySquare className="w-3.5 h-3.5 text-cyan-500" />}
-                      iconBg="bg-cyan-50 dark:bg-cyan-900/30"
-                      onClick={() => {
-                        const targetPostId = getActivityTargetPostId(item);
-                        if (!targetPostId) return;
-                        setShowActivity(false);
-                        router.push(`/posts/${targetPostId}`);
-                      }}
-                    />
-                  ))
+                  activityData?.viewedVideos.map((item: unknown, index: number) => {
+                    const record = asRecord(item);
+                    const video = asRecord(record.video);
+                    const videoUser = asRecord(video.user);
+                    const itemKey =
+                      asText(record._id) || asText(record.id) || `viewed-${index}`;
+                    const author =
+                      asText(videoUser.displayName) ||
+                      asText(record.author) ||
+                      "N/A";
+                    const content =
+                      asText(video.title) || asText(record.title) || "Video đã xem";
+                    const activityTime = timeAgo(
+                      toTimeValue(record.createdAt) || toTimeValue(record.viewedAt),
+                    );
+
+                    return (
+                      <ActivityItem
+                        key={itemKey}
+                        author={author}
+                        content={content}
+                        time={activityTime}
+                        icon={<PlaySquare className="w-3.5 h-3.5 text-cyan-500" />}
+                        iconBg="bg-cyan-50 dark:bg-cyan-900/30"
+                        onClick={() => {
+                          const targetPostId = getActivityTargetPostId(item);
+                          if (!targetPostId) return;
+                          setShowActivity(false);
+                          router.push(`/posts/${targetPostId}`);
+                        }}
+                      />
+                    );
+                  })
                 )
               ) : activityTab === "liked" ? (
                 (activityData?.likedPosts?.length || 0) === 0 ? (
@@ -981,24 +1015,39 @@ export default function SettingsPage() {
                     Chưa thích bài viết nào
                   </div>
                 ) : (
-                  activityData?.likedPosts.map((item: unknown) => (
-                    <ActivityItem
-                      key={item._id || item.id}
-                      author={item.post?.user?.displayName || item.author || "Người dùng"}
-                      content="Bạn đã bình luận một bài viết"
-                      time={timeAgo(item.createdAt || item.likedAt)}
-                      icon={
-                        <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-                      }
-                      iconBg="bg-rose-50 dark:bg-rose-900/30"
-                      onClick={() => {
-                        const targetPostId = getActivityTargetPostId(item);
-                        if (!targetPostId) return;
-                        setShowActivity(false);
-                        router.push(`/posts/${targetPostId}`);
-                      }}
-                    />
-                  ))
+                  activityData?.likedPosts.map((item: unknown, index: number) => {
+                    const record = asRecord(item);
+                    const post = asRecord(record.post);
+                    const postUser = asRecord(post.user);
+                    const itemKey =
+                      asText(record._id) || asText(record.id) || `liked-${index}`;
+                    const author =
+                      asText(postUser.displayName) ||
+                      asText(record.author) ||
+                      "Người dùng";
+                    const activityTime = timeAgo(
+                      toTimeValue(record.createdAt) || toTimeValue(record.likedAt),
+                    );
+
+                    return (
+                      <ActivityItem
+                        key={itemKey}
+                        author={author}
+                        content="Bạn đã bình luận một bài viết"
+                        time={activityTime}
+                        icon={
+                          <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                        }
+                        iconBg="bg-rose-50 dark:bg-rose-900/30"
+                        onClick={() => {
+                          const targetPostId = getActivityTargetPostId(item);
+                          if (!targetPostId) return;
+                          setShowActivity(false);
+                          router.push(`/posts/${targetPostId}`);
+                        }}
+                      />
+                    );
+                  })
                 )
               ) : (
                 (activityData?.commentedPosts?.length || 0) === 0 ? (
@@ -1006,24 +1055,39 @@ export default function SettingsPage() {
                     Chưa bình luận bài viết nào
                   </div>
                 ) : (
-                  activityData?.commentedPosts.map((item: unknown) => (
-                    <ActivityItem
-                      key={item._id || item.id}
-                      author={item.post?.user?.displayName || item.author || "Người dùng"}
-                      content={`Bình luận: "${item.content || item.comment || "..."}"`}
-                      time={timeAgo(item.createdAt)}
-                      icon={
-                        <MessageCircle className="w-3.5 h-3.5 text-blue-500" />
-                      }
-                      iconBg="bg-blue-50 dark:bg-blue-900/30"
-                      onClick={() => {
-                        const targetPostId = getActivityTargetPostId(item);
-                        if (!targetPostId) return;
-                        setShowActivity(false);
-                        router.push(`/posts/${targetPostId}`);
-                      }}
-                    />
-                  ))
+                  activityData?.commentedPosts.map((item: unknown, index: number) => {
+                    const record = asRecord(item);
+                    const post = asRecord(record.post);
+                    const postUser = asRecord(post.user);
+                    const itemKey =
+                      asText(record._id) || asText(record.id) || `commented-${index}`;
+                    const author =
+                      asText(postUser.displayName) ||
+                      asText(record.author) ||
+                      "Người dùng";
+                    const commentContent =
+                      asText(record.content) || asText(record.comment) || "...";
+                    const activityTime = timeAgo(toTimeValue(record.createdAt));
+
+                    return (
+                      <ActivityItem
+                        key={itemKey}
+                        author={author}
+                        content={`Bình luận: "${commentContent}"`}
+                        time={activityTime}
+                        icon={
+                          <MessageCircle className="w-3.5 h-3.5 text-blue-500" />
+                        }
+                        iconBg="bg-blue-50 dark:bg-blue-900/30"
+                        onClick={() => {
+                          const targetPostId = getActivityTargetPostId(item);
+                          if (!targetPostId) return;
+                          setShowActivity(false);
+                          router.push(`/posts/${targetPostId}`);
+                        }}
+                      />
+                    );
+                  })
                 )
               )}
             </div>

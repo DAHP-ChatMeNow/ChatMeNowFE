@@ -135,6 +135,10 @@ export default function FriendProfileView({ userId }: FriendProfileViewProps) {
             <div className="p-6 text-center bg-white border rounded-2xl border-slate-200 text-slate-500">
               Không thể tải thông tin trang cá nhân.
             </div>
+          ) : !friend ? (
+            <div className="p-6 text-center bg-white border rounded-2xl border-slate-200 text-slate-500">
+              Không thể tải thông tin trang cá nhân.
+            </div>
           ) : (
             <>
               <div className="overflow-hidden bg-white border rounded-2xl border-slate-200">

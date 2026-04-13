@@ -141,7 +141,13 @@ const toIdString = (
 const normalizeActivityPostReference = (post: unknown) => {
   if (!post || typeof post !== "object") return post;
   const raw = post as Record<string, unknown>;
-  const mapped = mapMongoUser(raw as unknown as User) as Record<string, unknown>;
+  const normalizedId = toIdString(
+    (raw.id || raw._id) as string | { _id?: string; id?: string } | null,
+  );
+  const mapped: Record<string, unknown> = {
+    ...raw,
+    id: normalizedId || "",
+  };
 
   const sourcePostId = toIdString(
     raw.sourcePostId as string | { _id?: string; id?: string } | null,
