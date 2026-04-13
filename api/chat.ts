@@ -6,6 +6,48 @@ export interface ConversationsResponse {
   conversations: Conversation[];
 }
 
+export interface ShareTargetMember {
+  id?: string;
+  _id?: string;
+  userId?: string | { id?: string; _id?: string };
+  displayName?: string;
+  avatar?: string;
+}
+
+export interface ShareTargetLastMessage {
+  content?: string;
+  type?: string;
+  createdAt?: Date | string;
+  senderName?: string;
+}
+
+export interface ShareTargetPartner {
+  id?: string;
+  _id?: string;
+  displayName?: string;
+  avatar?: string;
+}
+
+export interface ShareTargetItem {
+  conversationId: string;
+  type?: string;
+  displayName?: string;
+  avatar?: string;
+  activityAt?: Date | string;
+  lastMessage?: ShareTargetLastMessage;
+  memberCount?: number;
+  members?: ShareTargetMember[];
+  partner?: ShareTargetPartner;
+}
+
+export interface ShareTargetsResponse {
+  targets: ShareTargetItem[];
+  recentMembers: ShareTargetMember[];
+  total: number;
+  limit: number;
+  keyword?: string;
+}
+
 export interface ConversationDetailsResponse {
   conversation: Conversation;
 }
@@ -422,6 +464,39 @@ export const chatService = {
       );
     }
     return res.data;
+  },
+
+  getShareTargets: async (params?: {
+    q?: string;
+    limit?: number;
+  }): Promise<ShareTargetsResponse> => {
+    const keyword = String(params?.q || "").trim();
+    const requestedLimit = Number(params?.limit || 20);
+    const safeLimit = Math.max(1, Math.min(100, Math.floor(requestedLimit)));
+
+    const res = await api.get<any>("/chat/share-targets", {
+      params: {
+        q: keyword || undefined,
+        limit: safeLimit,
+      },
+    });
+
+    const payload = res.data?.data && typeof res.data.data === "object"
+      ? res.data.data
+      : res.data || {};
+
+    const rawTargets = Array.isArray(payload.targets) ? payload.targets : [];
+    const rawRecentMembers = Array.isArray(payload.recentMembers)
+      ? payload.recentMembers
+      : [];
+
+    return {
+      targets: rawTargets.map((item: any) => mapMongoId(item)),
+      recentMembers: rawRecentMembers.map((item: any) => mapMongoId(item)),
+      total: Number(payload.total || rawTargets.length || 0),
+      limit: Number(payload.limit || safeLimit),
+      keyword: typeof payload.keyword === "string" ? payload.keyword : keyword,
+    };
   },
 
   // Lấy hoặc tạo AI conversation (được ghim đầu danh sách)

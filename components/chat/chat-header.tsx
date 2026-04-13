@@ -75,6 +75,7 @@ import {
 import { useAuthStore } from "@/store/use-auth-store";
 import {
   useBlockUser,
+  useUnblockUser,
   useContacts,
   useGetFriendProfile,
   useSendFriendRequest,
@@ -367,6 +368,7 @@ export function ChatHeader({
   const { data: contactsData } = useContacts();
   const contacts = contactsData?.contacts || [];
   const blockUserMutation = useBlockUser();
+  const unblockUserMutation = useUnblockUser();
   const createGroupMutation = useCreateConversation();
   const { startCall, startGroupCall, isBusy } = useVideoCall();
   const { mutateAsync: getPrivateConversationAsync } =
@@ -623,6 +625,9 @@ export function ChatHeader({
 
   const canOpenFriendProfile =
     conversation?.type === "private" && Boolean(partnerId);
+  const isBlockedByMe = Boolean(
+    conversation?.type === "private" && conversation?.blockedByMe,
+  );
 
   const latestPinnedItem = useMemo(() => {
     if (!Array.isArray(pinnedMessages) || pinnedMessages.length === 0) {
@@ -965,12 +970,18 @@ export function ChatHeader({
                       className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
                       onClick={async () => {
                         if (partnerId) {
+                          if (isBlockedByMe) {
+                            await unblockUserMutation.mutateAsync(partnerId);
+                            return;
+                          }
+
                           await blockUserMutation.mutateAsync(partnerId);
                           router.push("/contacts");
                         }
                       }}
                     >
-                      <ShieldBan className="text-red-500" /> Chặn người này
+                      <ShieldBan className={isBlockedByMe ? "text-emerald-500" : "text-red-500"} />
+                      {isBlockedByMe ? "Mở chặn người này" : "Chặn người này"}
                     </DropdownMenuItem>
                   </>
                 )}

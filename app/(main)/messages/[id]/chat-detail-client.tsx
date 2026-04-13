@@ -64,6 +64,7 @@ import { Input } from "@/components/ui/input";
 import { SharedPostPreview } from "@/components/post/shared-post-preview";
 import { useQueryClient } from "@tanstack/react-query";
 import { chatService, MessagesResponse } from "@/api/chat";
+import { postService } from "@/api/post";
 import { usePresignedUrl } from "@/hooks/use-profile";
 import { toast } from "sonner";
 import {
@@ -221,6 +222,12 @@ const parseForwardedMessageContent = (content?: string) => {
       .slice(FORWARDED_MESSAGE_MARKER.length)
       .replace(/^\n+/, ""),
   };
+};
+
+const pickStringField = (source: unknown, key: string): string => {
+  if (!source || typeof source !== "object") return "";
+  const value = (source as Record<string, unknown>)[key];
+  return typeof value === "string" ? value : "";
 };
 
 const getForwardableAttachments = (attachments?: MessageAttachment[]) =>
@@ -1033,6 +1040,7 @@ export default function ChatDetailClient() {
   const [isLoadingJoinGroupInfo, setIsLoadingJoinGroupInfo] = useState(false);
   const [isJoiningGroup, setIsJoiningGroup] = useState(false);
   const [summaryOpen, setSummaryOpen] = useState(false);
+  const originalPostIdCacheRef = useRef(new Map<string, string>());
   const { mutate: markConversationAsRead, isPending: isMarkingConversationAsRead } =
     useMarkConversationAsRead();
 
@@ -1104,6 +1112,64 @@ export default function ChatDetailClient() {
       setIsJoiningGroup(false);
     }
   }, [conversationId, isJoiningGroup, router]);
+
+  const handleOpenSharedPost = useCallback(
+    async ({
+      openPostId,
+      fallbackPostId,
+    }: {
+      openPostId?: string;
+      fallbackPostId?: string;
+    }) => {
+      const normalizedOpenPostId = String(openPostId || "").trim();
+      if (normalizedOpenPostId) {
+        router.push(`/posts/${normalizedOpenPostId}`);
+        return;
+      }
+
+      const normalizedFallbackPostId = String(fallbackPostId || "").trim();
+      if (!normalizedFallbackPostId) return;
+
+      const cachedOriginalId =
+        originalPostIdCacheRef.current.get(normalizedFallbackPostId);
+      if (cachedOriginalId) {
+        router.push(`/posts/${cachedOriginalId}`);
+        return;
+      }
+
+      try {
+        const resolved = await postService.resolveOriginalPost(
+          normalizedFallbackPostId,
+        );
+        const resolvedOriginalId = String(
+          resolved.originalPostId || resolved.sourcePostId || normalizedFallbackPostId,
+        ).trim();
+
+        if (resolvedOriginalId) {
+          originalPostIdCacheRef.current.set(
+            normalizedFallbackPostId,
+            resolvedOriginalId,
+          );
+
+          const normalizedSourceId = String(resolved.sourcePostId || "").trim();
+          if (normalizedSourceId) {
+            originalPostIdCacheRef.current.set(
+              normalizedSourceId,
+              resolvedOriginalId,
+            );
+          }
+
+          router.push(`/posts/${resolvedOriginalId}`);
+          return;
+        }
+      } catch {
+        // Fallback to source post if resolve API fails.
+      }
+
+      router.push(`/posts/${normalizedFallbackPostId}`);
+    },
+    [router],
+  );
 
   // Hook tập trung logic phân biệt private/group - tự động fetch partner nếu cần
   const {
@@ -2299,6 +2365,12 @@ export default function ChatDetailClient() {
                       sharedPostData?._id ||
                       "",
                   ).trim();
+                  const openPostId = String(
+                    pickStringField(sharedPostData, "openPostId") ||
+                      pickStringField(sharedPostData, "originalPostId") ||
+                      pickStringField(sharedPostMessage, "openPostId") ||
+                      "",
+                  ).trim();
                   const hasSharedPost =
                     msg.type === "shared_post" &&
                     !isUnsent &&
@@ -2307,6 +2379,8 @@ export default function ChatDetailClient() {
                     ? sharedPostData || {
                         id: sharedPostId,
                         _id: sharedPostId,
+                        sourcePostId: sharedPostId,
+                        openPostId: openPostId || sharedPostId,
                         isAccessible: true,
                         content: "Bài viết được chia sẻ",
                       }
@@ -2474,7 +2548,7 @@ export default function ChatDetailClient() {
                               ? "w-fit p-0 bg-transparent text-slate-800 shadow-none"
                               : isUnsent
                                 ? unsentBubbleClass
-                              : `px-4 py-2.5 shadow-sm ${
+                              : `${hasSharedPost ? "p-1.5" : "px-4 py-2.5"} shadow-sm ${
                                   isMe
                                     ? "bg-blue-600 text-white rounded-br-none"
                                     : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
@@ -2532,15 +2606,17 @@ export default function ChatDetailClient() {
                             </div>
                           )}
                           {hasSharedPost && (
-                            <div className={msg.content ? "mb-2" : ""}>
+                            <div className={parsedContent ? "mb-1.5" : ""}>
                               <SharedPostPreview
                                 post={sharedPostPreview}
                                 isMe={isMe}
                                 compact
-                                onClick={() => {
-                                  if (!sharedPostId) return;
-                                  router.push(`/posts/${sharedPostId}`);
-                                }}
+                                onClick={() =>
+                                  void handleOpenSharedPost({
+                                    openPostId,
+                                    fallbackPostId: sharedPostId,
+                                  })
+                                }
                               />
                             </div>
                           )}
@@ -2549,7 +2625,9 @@ export default function ChatDetailClient() {
                               Tin nhắn đã được thu hồi
                             </p>
                           ) : parsedContent ? (
-                            renderMessageContent(parsedContent)
+                            <div className={hasSharedPost ? "px-2.5 pb-1 pt-1.5" : ""}>
+                              {renderMessageContent(parsedContent)}
+                            </div>
                           ) : null}
                           {msg.type === "audio" && visibleAttachments.length === 0 && (
                             <div

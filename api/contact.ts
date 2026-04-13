@@ -70,9 +70,10 @@ export const contactService = {
     return { contacts: mappedContacts };
   },
 
-  searchUsers: async (query: string) => {
+  searchUsers: async (params: { q?: string; city?: string; school?: string }) => {
+    // We hit /users/search as indicated by backend updates
     const res = await api.get<SearchUsersResponse>("/users/search", {
-      params: { q: query }
+      params,
     });
     if (res.data.users) {
       res.data.users = res.data.users.map((user: any) => mapMongoId(user));

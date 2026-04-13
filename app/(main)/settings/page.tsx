@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -11,13 +11,14 @@ import {
   Phone,
   Mail,
   KeyRound,
-  Eye,
   Heart,
   History,
   Check,
   X,
   Loader2,
   Clock,
+  MessageCircle,
+  PlaySquare,
 } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -40,52 +41,52 @@ import {
   useVerifyAccountLockOtp,
 } from "@/hooks/use-auth";
 import { userService } from "@/api/user";
+import { useActivityHistory } from "@/hooks/use-user";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
 
-// ─── Mock activity data (until API is ready) ───────────────────────────────
-const MOCK_VIEWED = [
-  {
-    id: "1",
-    author: "Ngọc Bích",
-    content: "Hôm nay trời đẹp quá, đi chơi thôi!",
-    viewedAt: new Date(Date.now() - 1000 * 60 * 30),
-  },
-  {
-    id: "2",
-    author: "Thanh Thảo",
-    content: "Chia sẻ bài học lập trình React hôm nay...",
-    viewedAt: new Date(Date.now() - 1000 * 60 * 90),
-  },
-  {
-    id: "3",
-    author: "Hoàng Nam",
-    content: "Review nhà hàng mới mở gần chỗ mình...",
-    viewedAt: new Date(Date.now() - 1000 * 60 * 180),
-  },
-];
-const MOCK_LIKED = [
-  {
-    id: "4",
-    author: "Lâm Ngọc Thái",
-    content: "Test ảnh mới nhé mọi người!",
-    likedAt: new Date(Date.now() - 1000 * 60 * 45),
-  },
-  {
-    id: "5",
-    author: "Thu Thuỷ",
-    content: "Cuối tuần check-in Đà Lạt",
-    likedAt: new Date(Date.now() - 1000 * 60 * 240),
-  },
-];
-
-function timeAgo(date: Date) {
-  const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+function timeAgo(date: Date | string | number) {
+  if (!date) return "";
+  const diff = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
   if (diff < 60) return `${diff} giây trước`;
   if (diff < 3600) return `${Math.floor(diff / 60)} phút trước`;
   if (diff < 86400) return `${Math.floor(diff / 3600)} giờ trước`;
   return `${Math.floor(diff / 86400)} ngày trước`;
 }
+
+const toIdString = (value: unknown): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "object") {
+    const maybeId = value as { _id?: string; id?: string };
+    return String(maybeId._id || maybeId.id || "").trim();
+  }
+  return "";
+};
+
+const getActivityTargetPostId = (item: unknown): string => {
+  if (!item || typeof item !== "object") return "";
+  const record = item as Record<string, unknown>;
+  const post =
+    (record.post && typeof record.post === "object"
+      ? (record.post as Record<string, unknown>)
+      : undefined) ||
+    (record.video &&
+    typeof record.video === "object" &&
+    (record.video as Record<string, unknown>).post &&
+    typeof (record.video as Record<string, unknown>).post === "object"
+      ? ((record.video as Record<string, unknown>).post as Record<string, unknown>)
+      : undefined);
+
+  if (!post) return "";
+
+  return (
+    toIdString(post.openPostId) ||
+    toIdString(post.sourcePostId) ||
+    toIdString(post._id) ||
+    toIdString(post.id)
+  );
+};
 
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function SettingsPage() {
@@ -102,6 +103,7 @@ export default function SettingsPage() {
     useVerifyAccountLockOtp();
   const { mutate: confirmAccountLock, isPending: isConfirmingLock } =
     useConfirmAccountLock();
+  const { data: activityData, isLoading: isLoadingActivity } = useActivityHistory(20);
 
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
@@ -109,7 +111,7 @@ export default function SettingsPage() {
   const [showActivity, setShowActivity] = useState(false);
   const [showBlockedDialog, setShowBlockedDialog] = useState(false);
   const [showLockDialog, setShowLockDialog] = useState(false);
-  const [activityTab, setActivityTab] = useState<"viewed" | "liked">("viewed");
+  const [activityTab, setActivityTab] = useState<"video" | "liked" | "commented">("video");
   const [lockStep, setLockStep] = useState<1 | 2 | 3>(1);
   const [lockOtp, setLockOtp] = useState("");
   const [lockOtpSent, setLockOtpSent] = useState(false);
@@ -418,14 +420,14 @@ export default function SettingsPage() {
           {/* Activity */}
           <Section label="Hoạt động">
             <SettingItem
-              icon={Eye}
+              icon={PlaySquare}
               iconBg="bg-cyan-50 dark:bg-cyan-900/20"
               iconColor="text-cyan-500"
-              label="Lịch sử xem bài viết"
-              description={`${MOCK_VIEWED.length} bài viết đã xem gần đây`}
-              badge={String(MOCK_VIEWED.length)}
+              label="Video đã xem"
+              description={`${activityData?.summary?.viewedVideos || 0} clip đã xem gần đây`}
+              badge={String(activityData?.summary?.viewedVideos || 0)}
               onClick={() => {
-                setActivityTab("viewed");
+                setActivityTab("video");
                 setShowActivity(true);
               }}
             />
@@ -434,10 +436,22 @@ export default function SettingsPage() {
               iconBg="bg-rose-50 dark:bg-rose-900/20"
               iconColor="text-rose-500"
               label="Bài viết đã thích"
-              description={`${MOCK_LIKED.length} bài viết bạn đã thích`}
-              badge={String(MOCK_LIKED.length)}
+              description={`${activityData?.summary?.likedPosts || 0} bài viết bạn đã thích`}
+              badge={String(activityData?.summary?.likedPosts || 0)}
               onClick={() => {
                 setActivityTab("liked");
+                setShowActivity(true);
+              }}
+            />
+            <SettingItem
+              icon={MessageCircle}
+              iconBg="bg-blue-50 dark:bg-blue-900/20"
+              iconColor="text-blue-500"
+              label="Đã bình luận"
+              description={`${activityData?.summary?.commentedPosts || 0} bài viết đã tương tác`}
+              badge={String(activityData?.summary?.commentedPosts || 0)}
+              onClick={() => {
+                setActivityTab("commented");
                 setShowActivity(true);
               }}
             />
@@ -896,66 +910,121 @@ export default function SettingsPage() {
               Lịch sử hoạt động
             </DialogTitle>
           </DialogHeader>
-          <div className="flex gap-1 px-5 pt-4 pb-3 border-b border-slate-100 dark:border-slate-700 shrink-0">
+          <div className="flex gap-1 px-5 pt-4 pb-3 border-b border-slate-100 dark:border-slate-700 shrink-0 overflow-x-auto no-scrollbar">
             <button
-              onClick={() => setActivityTab("viewed")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
-                activityTab === "viewed"
+              onClick={() => setActivityTab("video")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                activityTab === "video"
                   ? "bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-400"
                   : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"
               }`}
             >
-              <Eye className="w-4 h-4" />
-              Đã xem ({MOCK_VIEWED.length})
+              <PlaySquare className="w-4 h-4" />
+              Video ({activityData?.summary?.viewedVideos || 0})
             </button>
             <button
               onClick={() => setActivityTab("liked")}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all ${
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
                 activityTab === "liked"
                   ? "bg-rose-50 dark:bg-rose-900/30 text-rose-600 dark:text-rose-400"
                   : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"
               }`}
             >
               <Heart className="w-4 h-4" />
-              Đã thích ({MOCK_LIKED.length})
+              Đã thích ({activityData?.summary?.likedPosts || 0})
+            </button>
+            <button
+              onClick={() => setActivityTab("commented")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                activityTab === "commented"
+                  ? "bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400"
+                  : "text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-700"
+              }`}
+            >
+              <MessageCircle className="w-4 h-4" />
+              Bình luận ({activityData?.summary?.commentedPosts || 0})
             </button>
           </div>
           <ScrollArea className="flex-1 min-h-0">
             <div className="px-5 py-3 space-y-2">
-              {activityTab === "viewed" ? (
-                MOCK_VIEWED.length === 0 ? (
+              {isLoadingActivity ? (
+                <div className="py-12 flex flex-col items-center justify-center text-sm text-slate-400">
+                  <Loader2 className="w-6 h-6 mb-2 animate-spin text-slate-300" />
+                  Đang tải dữ liệu...
+                </div>
+              ) : activityTab === "video" ? (
+                (activityData?.viewedVideos?.length || 0) === 0 ? (
                   <div className="py-12 text-sm text-center text-slate-400">
-                    Chưa có bài viết nào được xem
+                    Chưa có video nào được xem
                   </div>
                 ) : (
-                  MOCK_VIEWED.map((item) => (
+                  activityData?.viewedVideos.map((item: unknown) => (
                     <ActivityItem
-                      key={item.id}
-                      author={item.author}
-                      content={item.content}
-                      time={timeAgo(item.viewedAt)}
-                      icon={<Eye className="w-3.5 h-3.5 text-cyan-500" />}
+                      key={item._id || item.id}
+                      author={item.video?.user?.displayName || item.author || "N/A"}
+                      content={item.video?.title || item.title || "Video đã xem"}
+                      time={timeAgo(item.createdAt || item.viewedAt)}
+                      icon={<PlaySquare className="w-3.5 h-3.5 text-cyan-500" />}
                       iconBg="bg-cyan-50 dark:bg-cyan-900/30"
+                      onClick={() => {
+                        const targetPostId = getActivityTargetPostId(item);
+                        if (!targetPostId) return;
+                        setShowActivity(false);
+                        router.push(`/posts/${targetPostId}`);
+                      }}
                     />
                   ))
                 )
-              ) : MOCK_LIKED.length === 0 ? (
-                <div className="py-12 text-sm text-center text-slate-400">
-                  Chưa thích bài viết nào
-                </div>
+              ) : activityTab === "liked" ? (
+                (activityData?.likedPosts?.length || 0) === 0 ? (
+                  <div className="py-12 text-sm text-center text-slate-400">
+                    Chưa thích bài viết nào
+                  </div>
+                ) : (
+                  activityData?.likedPosts.map((item: unknown) => (
+                    <ActivityItem
+                      key={item._id || item.id}
+                      author={item.post?.user?.displayName || item.author || "Người dùng"}
+                      content="Bạn đã bình luận một bài viết"
+                      time={timeAgo(item.createdAt || item.likedAt)}
+                      icon={
+                        <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
+                      }
+                      iconBg="bg-rose-50 dark:bg-rose-900/30"
+                      onClick={() => {
+                        const targetPostId = getActivityTargetPostId(item);
+                        if (!targetPostId) return;
+                        setShowActivity(false);
+                        router.push(`/posts/${targetPostId}`);
+                      }}
+                    />
+                  ))
+                )
               ) : (
-                MOCK_LIKED.map((item) => (
-                  <ActivityItem
-                    key={item.id}
-                    author={item.author}
-                    content={item.content}
-                    time={timeAgo(item.likedAt)}
-                    icon={
-                      <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500" />
-                    }
-                    iconBg="bg-rose-50 dark:bg-rose-900/30"
-                  />
-                ))
+                (activityData?.commentedPosts?.length || 0) === 0 ? (
+                  <div className="py-12 text-sm text-center text-slate-400">
+                    Chưa bình luận bài viết nào
+                  </div>
+                ) : (
+                  activityData?.commentedPosts.map((item: unknown) => (
+                    <ActivityItem
+                      key={item._id || item.id}
+                      author={item.post?.user?.displayName || item.author || "Người dùng"}
+                      content={`Bình luận: "${item.content || item.comment || "..."}"`}
+                      time={timeAgo(item.createdAt)}
+                      icon={
+                        <MessageCircle className="w-3.5 h-3.5 text-blue-500" />
+                      }
+                      iconBg="bg-blue-50 dark:bg-blue-900/30"
+                      onClick={() => {
+                        const targetPostId = getActivityTargetPostId(item);
+                        if (!targetPostId) return;
+                        setShowActivity(false);
+                        router.push(`/posts/${targetPostId}`);
+                      }}
+                    />
+                  ))
+                )
               )}
             </div>
           </ScrollArea>
@@ -1120,15 +1189,28 @@ function ActivityItem({
   time,
   icon,
   iconBg,
+  onClick,
 }: {
   author: string;
   content: string;
   time: string;
   icon: React.ReactNode;
   iconBg: string;
+  onClick?: () => void;
 }) {
+  const isClickable = typeof onClick === "function";
+
   return (
-    <div className="flex items-start gap-3 p-3 transition-colors cursor-pointer rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700/50 group">
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={!isClickable}
+      className={`flex w-full items-start gap-3 rounded-xl p-3 text-left transition-colors group ${
+        isClickable
+          ? "cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-700/50"
+          : "cursor-default"
+      }`}
+    >
       <div
         className={`w-8 h-8 rounded-full ${iconBg} flex items-center justify-center shrink-0 mt-0.5`}
       >
@@ -1146,7 +1228,9 @@ function ActivityItem({
           <span className="text-[11px] text-slate-400">{time}</span>
         </div>
       </div>
-      <ChevronRight className="w-4 h-4 mt-1 transition-opacity opacity-0 text-slate-300 group-hover:opacity-100 shrink-0" />
-    </div>
+      {isClickable ? (
+        <ChevronRight className="w-4 h-4 mt-1 transition-opacity opacity-0 text-slate-300 group-hover:opacity-100 shrink-0" />
+      ) : null}
+    </button>
   );
 }

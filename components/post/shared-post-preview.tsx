@@ -66,50 +66,61 @@ export function SharedPostPreview({
     <button
       type="button"
       onClick={onClick}
-      className={`w-full overflow-hidden rounded-xl border text-left transition hover:opacity-95 ${
+      className={`w-full overflow-hidden rounded-2xl text-left transition-all hover:opacity-95 flex flex-col group block ${
         isMe
-          ? "border-blue-300/40 bg-blue-500/25 text-blue-50"
-          : "border-slate-200 bg-slate-50 text-slate-800"
+          ? "bg-white/95 text-gray-900 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.1)] border border-transparent"
+          : "bg-white text-gray-900 shadow-[0_2px_10px_-4px_rgba(0,0,0,0.05)] border border-gray-100"
       } ${className}`}
     >
-      <div className="flex items-center gap-3 px-3 py-2">
+      <div className="flex items-center gap-2.5 px-3.5 py-3">
         <PresignedAvatar
           avatarKey={avatar}
           displayName={displayName}
-          className="h-9 w-9"
+          className="h-9 w-9 ring-1 ring-black/5"
         />
-        <div className="min-w-0">
-          <p className="truncate text-sm font-semibold">{displayName}</p>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-[13px] font-bold leading-tight group-hover:text-blue-600 transition-colors">{displayName}</p>
           {post.createdAt ? (
-            <p className="truncate text-[11px] text-slate-500 mt-0.5">
+            <p className="truncate text-[11px] font-medium text-gray-500 mt-0.5">
               {formatPostTime(post.createdAt)}
             </p>
           ) : null}
         </div>
       </div>
+
       {post.content ? (
-        <p
-          className={`overflow-hidden px-3 pb-2 text-sm leading-6 ${
-            compact ? "max-h-[72px]" : "max-h-[160px]"
-          }`}
-        >
-          {post.content}
-        </p>
+        <div className="px-3.5 pb-3">
+          <p
+            className={`text-[13px] text-gray-700 leading-relaxed overflow-hidden ${
+              compact ? "line-clamp-2" : "max-h-[160px]"
+            }`}
+          >
+            {post.content}
+          </p>
+        </div>
       ) : null}
+
       {firstMedia?.url ? (
         <div
-          className={`w-full overflow-hidden bg-black/5 ${
-            compact ? "h-36" : "h-[320px] md:h-[460px]"
+          className={`w-full overflow-hidden bg-gray-100 relative ${
+            compact ? "h-[140px]" : "h-[220px] sm:h-[280px]"
           }`}
         >
           {getMediaType(firstMedia.type, firstMedia.url) === "video" ? (
-            <video
-              src={firstMedia.url}
-              className="h-full w-full object-cover"
-              muted
-              playsInline
-              preload="metadata"
-            />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/5">
+              <video
+                src={firstMedia.url}
+                className="h-full w-full object-cover"
+                muted
+                playsInline
+                preload="metadata"
+              />
+              <div className="absolute inset-0 flex items-center justify-center bg-black/10">
+                <div className="w-10 h-10 bg-white/90 rounded-full flex items-center justify-center backdrop-blur-sm shadow-lg">
+                  <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-gray-900 border-b-[6px] border-b-transparent ml-1" />
+                </div>
+              </div>
+            </div>
           ) : (
             <img
               src={firstMedia.url}

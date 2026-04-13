@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { userService } from "@/api/user";
 import { useAuthStore } from "@/store/use-auth-store";
 
@@ -30,5 +30,46 @@ export const useUserProfile = () => {
     staleTime: 20000,
     // Giữ data trong 1 phút
     gcTime: 60000,
+  });
+};
+
+export const useSearchHistory = (limit: number = 20) => {
+  return useQuery({
+    queryKey: ["search-history", limit],
+    queryFn: () => userService.getSearchHistory(limit),
+  });
+};
+
+export const useDeleteSearchHistory = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: userService.deleteSearchHistory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["search-history"] });
+    },
+  });
+};
+
+export const useProfileVisitHistory = (limit: number = 20) => {
+  return useQuery({
+    queryKey: ["profile-visit-history", limit],
+    queryFn: () => userService.getProfileVisitHistory(limit),
+  });
+};
+
+export const useDeleteProfileVisitHistory = () => {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: userService.deleteProfileVisitHistory,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profile-visit-history"] });
+    },
+  });
+};
+
+export const useActivityHistory = (limit: number = 20) => {
+  return useQuery({
+    queryKey: ["activity-history", limit],
+    queryFn: () => userService.getActivityHistory(limit),
   });
 };

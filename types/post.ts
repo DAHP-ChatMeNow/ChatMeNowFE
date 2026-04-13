@@ -11,6 +11,8 @@ export interface PostMedia {
 export interface SharedPostReference {
   id?: string;
   _id?: string;
+  sourcePostId?: string;
+  openPostId?: string;
   isAccessible?: boolean;
   authorId?: string | User;
   author?: User;

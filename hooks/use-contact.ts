@@ -21,11 +21,11 @@ export const useContacts = () => {
   });
 };
 
-export const useSearchUsers = (query: string) => {
+export const useSearchUsers = (query: string, city?: string, school?: string) => {
   return useQuery({
-    queryKey: ["search-users", query],
-    queryFn: () => contactService.searchUsers(query),
-    enabled: query.length > 0,
+    queryKey: ["search-users", query, city, school],
+    queryFn: () => contactService.searchUsers({ q: query, city, school }),
+    enabled: query.trim().length > 0 || (!!city && city.trim().length > 0) || (!!school && school.trim().length > 0),
   });
 };
 
@@ -164,11 +164,12 @@ export const useRemoveFriend = () => {
 
 export const useBlockedUsers = () => {
   const user = useAuthStore((state) => state.user);
+  const userId = user?._id || user?.id;
 
   return useQuery({
-    queryKey: ["blocked-users", user?._id],
+    queryKey: ["blocked-users", userId],
     queryFn: () => userService.getBlockedUsers(),
-    enabled: !!user?._id,
+    enabled: !!userId,
     refetchOnWindowFocus: false,
     staleTime: 5 * 60 * 1000,
   });
@@ -182,6 +183,9 @@ export const useBlockUser = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["blocked-users"] });
       queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["friend-profile"] });
       toast.success("Đã chặn người dùng");
     },
     onError: (error: any) => {
@@ -197,6 +201,10 @@ export const useUnblockUser = () => {
     mutationFn: userService.unblockUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["blocked-users"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["friend-profile"] });
       toast.success("Đã mở chặn người dùng");
     },
     onError: (error: any) => {

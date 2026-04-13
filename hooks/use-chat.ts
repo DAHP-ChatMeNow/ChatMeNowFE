@@ -11,6 +11,7 @@ import {
   SendAiMessagePayload,
   UpdateGroupConversationPayload,
   PinnedMessagesResponse,
+  ShareTargetsResponse,
 } from "@/api/chat";
 import { MessageAttachment } from "@/types/message";
 import { userService } from "@/api/user";
@@ -181,6 +182,26 @@ export const useConversations = () => {
     queryKey: ["conversations"],
     queryFn: (): Promise<ConversationsResponse> =>
       chatService.getConversations(),
+  });
+};
+
+export const useShareTargets = (
+  query: string,
+  limit = 20,
+  enabled = true,
+) => {
+  const normalizedQuery = query.trim();
+  const safeLimit = Math.max(1, Math.min(100, Math.floor(limit || 20)));
+
+  return useQuery({
+    queryKey: ["chat-share-targets", normalizedQuery, safeLimit],
+    queryFn: (): Promise<ShareTargetsResponse> =>
+      chatService.getShareTargets({
+        q: normalizedQuery || undefined,
+        limit: safeLimit,
+      }),
+    enabled,
+    staleTime: 60_000,
   });
 };
 
@@ -1045,4 +1066,3 @@ export const useReactToMessage = () => {
     },
   });
 };
-

@@ -14,6 +14,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import {
   useGetFriendProfile,
+  useBlockedUsers,
   useRemoveFriend,
 } from "@/hooks/use-contact";
 import { useGetPrivateConversation } from "@/hooks/use-chat";
@@ -39,6 +40,8 @@ export default function FriendProfileView({ userId }: FriendProfileViewProps) {
   const router = useRouter();
 
   const { data: friend, isLoading, error } = useGetFriendProfile(userId);
+  const { data: blockedUsersData, isLoading: isLoadingBlockedUsers } =
+    useBlockedUsers();
   const { mutate: getPrivateConversation, isPending: isOpeningChat } =
     useGetPrivateConversation();
   const { mutate: removeFriend, isPending: isRemovingFriend } =
@@ -61,6 +64,21 @@ export default function FriendProfileView({ userId }: FriendProfileViewProps) {
     { label: "Trường học", value: friend?.school },
     { label: "Tình trạng hôn nhân", value: friend?.maritalStatus },
   ].filter((item) => !!item.value?.trim());
+  const blockedUsers = blockedUsersData?.blockedUsers || [];
+  const isBlockedByCurrentUser = blockedUsers.some(
+    (blockedUser) => (blockedUser.id || blockedUser._id) === userId,
+  );
+  const errorStatusCode =
+    typeof (error as { response?: { status?: number } } | null)?.response
+      ?.status === "number"
+      ? ((error as { response?: { status?: number } }).response?.status as number)
+      : undefined;
+  const isProfileNotFound = Boolean(
+    isBlockedByCurrentUser ||
+      (!isLoading && !friend) ||
+      errorStatusCode === 403 ||
+      errorStatusCode === 404,
+  );
 
   const handleOpenChat = () => {
     if (!friend?.id) return;
@@ -101,12 +119,19 @@ export default function FriendProfileView({ userId }: FriendProfileViewProps) {
             </h1>
           </div>
 
-          {isLoading ? (
+          {isLoading || isLoadingBlockedUsers ? (
             <div className="flex items-center justify-center py-16 text-slate-500">
               <Loader2 className="w-6 h-6 mr-2 animate-spin" />
               Đang tải thông tin...
             </div>
-          ) : error || !friend ? (
+          ) : isProfileNotFound ? (
+            <div className="p-6 text-center bg-white border rounded-2xl border-slate-200 text-slate-500">
+              <p className="text-base font-semibold text-slate-800">Không tìm thấy trang</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Trang cá nhân này không tồn tại hoặc bạn không có quyền truy cập.
+              </p>
+            </div>
+          ) : error ? (
             <div className="p-6 text-center bg-white border rounded-2xl border-slate-200 text-slate-500">
               Không thể tải thông tin trang cá nhân.
             </div>

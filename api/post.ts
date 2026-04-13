@@ -43,6 +43,9 @@ interface BackendPost {
   sharedPostId?: string | { _id?: string; id?: string };
   sharedPost?: Partial<BackendPost> & {
     isAccessible?: boolean;
+    sourcePostId?: string | { _id?: string; id?: string };
+    openPostId?: string | { _id?: string; id?: string };
+    originalPostId?: string | { _id?: string; id?: string };
   };
   createdAt: Date;
   updatedAt?: Date;
@@ -163,6 +166,12 @@ export interface PostAiChatResult {
     id?: string;
     content: string;
   };
+}
+
+export interface ResolveOriginalPostResult {
+  sourcePostId: string;
+  originalPostId: string;
+  isOriginal: boolean;
 }
 
 const normalizeSuggestionOptions = (raw: unknown): string[] => {
@@ -313,6 +322,53 @@ const mapSharedPostReference = async (
   const sharedId = toIdString(
     (source as any)._id || (source as any).id || (raw as any).postId,
   );
+  const sourcePostId = toIdString(
+    (raw as any).sourcePostId ||
+      (source as any).sourcePostId ||
+      (raw as any).postId ||
+      (source as any).postId ||
+      sharedId,
+  );
+  const openPostId = toIdString(
+    (raw as any).openPostId ||
+      (source as any).openPostId ||
+      (raw as any).originalPostId ||
+      (source as any).originalPostId,
+  );
+
+  const authorRaw = source.authorId;
+  const authorId =
+    typeof authorRaw === "string"
+      ? authorRaw
+      : (authorRaw as any)?._id || (authorRaw as any)?.id;
+  const hasAuthorData =
+    typeof authorRaw === "string"
+      ? authorRaw.trim().length > 0
+      : Boolean(
+          (authorRaw as any)?._id ||
+            (authorRaw as any)?.id ||
+            (authorRaw as any)?.displayName ||
+            (authorRaw as any)?.avatar,
+        );
+  const normalizedContent = String(source.content || "");
+  const hasContent = normalizedContent.trim().length > 0;
+  const hasMedia = Array.isArray(source.media) && source.media.length > 0;
+  const hasPrivacy = typeof source.privacy !== "undefined";
+  const hasShareHint =
+    Boolean(sharedId) ||
+    Boolean(sourcePostId) ||
+    Boolean(openPostId) ||
+    hasAuthorData ||
+    hasContent ||
+    hasMedia ||
+    hasPrivacy ||
+    (source as any).isAccessible === false ||
+    (raw as any).isAccessible === false;
+
+  // Some API responses may include `sharedPost: {}` for non-shared posts.
+  // In that case, skip mapping to avoid rendering a fake shared-post card.
+  if (!hasShareHint) return undefined;
+
   const isAccessible =
     (source as any).isAccessible !== false && (raw as any).isAccessible !== false;
 
@@ -320,21 +376,21 @@ const mapSharedPostReference = async (
     return {
       id: sharedId,
       _id: sharedId,
+      sourcePostId: sourcePostId || sharedId,
+      openPostId: openPostId || sourcePostId || sharedId,
       isAccessible: false,
     };
   }
 
-  const authorRaw = source.authorId;
   return {
     id: sharedId,
     _id: sharedId,
+    sourcePostId: sourcePostId || sharedId,
+    openPostId: openPostId || sourcePostId || sharedId,
     isAccessible: true,
-    authorId:
-      typeof authorRaw === "string"
-        ? authorRaw
-        : (authorRaw as any)?._id || (authorRaw as any)?.id,
+    authorId,
     author: typeof authorRaw === "string" ? undefined : (authorRaw as User),
-    content: String(source.content || ""),
+    content: normalizedContent,
     privacy: source.privacy,
     media: await refreshPostMediaUrls(source.media),
     createdAt: source.createdAt,
@@ -615,6 +671,32 @@ const sharePostToChat = async (postId: string, payload: SharePostToChatPayload) 
   return data;
 };
 
+const resolveOriginalPost = async (
+  postId: string,
+): Promise<ResolveOriginalPostResult> => {
+  const normalizedPostId = String(postId || "").trim();
+  if (!normalizedPostId) {
+    throw new Error("postId is required");
+  }
+
+  const { data } = await api.get<any>(`/post/${normalizedPostId}/original`);
+  const payload =
+    data?.data && typeof data.data === "object" ? data.data : data || {};
+
+  const sourcePostId = String(
+    payload.sourcePostId || normalizedPostId,
+  ).trim();
+  const originalPostId = String(
+    payload.originalPostId || payload.openPostId || sourcePostId,
+  ).trim();
+
+  return {
+    sourcePostId,
+    originalPostId: originalPostId || sourcePostId,
+    isOriginal: Boolean(payload.isOriginal),
+  };
+};
+
 export const postService = {
   getFeed,
   createPost,
@@ -629,4 +711,5 @@ export const postService = {
   getUserPosts,
   sharePost,
   sharePostToChat,
+  resolveOriginalPost,
 };

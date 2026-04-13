@@ -89,6 +89,78 @@ export interface UnblockUserResponse {
   message: string;
 }
 
+export interface SearchHistoryItem {
+  id?: string;
+  _id?: string;
+  query?: string;
+  city?: string;
+  school?: string;
+  createdAt: string;
+}
+
+export interface ProfileVisitHistoryItem {
+  id?: string;
+  _id?: string;
+  visitedUserId: string;
+  visitedUser?: User;
+  createdAt: string;
+}
+
+export interface GetSearchHistoryResponse {
+  success: boolean;
+  data: SearchHistoryItem[];
+}
+
+export interface GetProfileVisitHistoryResponse {
+  success: boolean;
+  data: ProfileVisitHistoryItem[];
+}
+
+export interface ActivityHistorySummary {
+  likedPosts: number;
+  commentedPosts: number;
+  viewedVideos: number;
+}
+
+export interface ActivityHistoryResponse {
+  success: boolean;
+  summary: ActivityHistorySummary;
+  likedPosts: any[];
+  commentedPosts: any[];
+  viewedVideos: any[];
+}
+
+const toIdString = (
+  value?: string | { _id?: string; id?: string } | null,
+): string | undefined => {
+  if (!value) return undefined;
+  if (typeof value === "string") return value;
+  return value._id || value.id;
+};
+
+const normalizeActivityPostReference = (post: unknown) => {
+  if (!post || typeof post !== "object") return post;
+  const raw = post as Record<string, unknown>;
+  const mapped = mapMongoUser(raw as unknown as User) as Record<string, unknown>;
+
+  const sourcePostId = toIdString(
+    raw.sourcePostId as string | { _id?: string; id?: string } | null,
+  );
+  const openPostId = toIdString(
+    (raw.openPostId ||
+      raw.originalPostId) as string | { _id?: string; id?: string } | null,
+  );
+  const fallbackPostId = toIdString(
+    (raw._id || raw.id) as string | { _id?: string; id?: string } | null,
+  );
+
+  return {
+    ...mapped,
+    sourcePostId: sourcePostId || fallbackPostId,
+    openPostId: openPostId || sourcePostId || fallbackPostId,
+  };
+};
+
 const mapMongoUser = (user: User): User => {
   if (!user) return user;
   return {
@@ -301,6 +373,88 @@ export const userService = {
       `/users/${userId}/account-status`,
       data,
     );
+    return res.data;
+  },
+
+  /**
+   * Get search history
+   */
+  getSearchHistory: async (limit: number = 20) => {
+    const res = await api.get<GetSearchHistoryResponse>("/users/search-history", {
+      params: { limit },
+    });
+    return res.data;
+  },
+
+  /**
+   * Delete search history
+   */
+  deleteSearchHistory: async () => {
+    const res = await api.delete<{ success: boolean; message: string }>(
+      "/users/search-history",
+    );
+    return res.data;
+  },
+
+  /**
+   * Get profile visit history
+   */
+  getProfileVisitHistory: async (limit: number = 20) => {
+    const res = await api.get<GetProfileVisitHistoryResponse>(
+      "/users/profile-visit-history",
+      { params: { limit } },
+    );
+    // map visited users properly
+    if (res.data && res.data.data) {
+      res.data.data = res.data.data.map(item => ({
+        ...item,
+        visitedUser: item.visitedUser ? mapMongoUser(item.visitedUser) : undefined
+      }));
+    }
+    return res.data;
+  },
+
+  /**
+   * Delete profile visit history
+   */
+  deleteProfileVisitHistory: async () => {
+    const res = await api.delete<{ success: boolean; message: string }>(
+      "/users/profile-visit-history",
+    );
+    return res.data;
+  },
+
+  /**
+   * Get activity history (likes, comments, viewed videos)
+   */
+  getActivityHistory: async (limit: number = 20) => {
+    const res = await api.get<ActivityHistoryResponse>(
+      "/users/activity-history",
+      { params: { limit } },
+    );
+
+    if (res.data && typeof res.data === "object") {
+      res.data.likedPosts = (res.data.likedPosts || []).map((item: any) => ({
+        ...item,
+        post: normalizeActivityPostReference(item?.post),
+      }));
+
+      res.data.commentedPosts = (res.data.commentedPosts || []).map(
+        (item: any) => ({
+          ...item,
+          post: normalizeActivityPostReference(item?.post),
+        }),
+      );
+
+      res.data.viewedVideos = (res.data.viewedVideos || []).map((item: any) => ({
+        ...item,
+        post:
+          item?.sourceType === "post"
+            ? normalizeActivityPostReference(item?.post)
+            : item?.post,
+      }));
+    }
+
     return res.data;
   },
 };

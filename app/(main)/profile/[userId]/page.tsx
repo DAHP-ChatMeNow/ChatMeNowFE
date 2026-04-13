@@ -15,6 +15,7 @@ import {
   Share2,
   UserPlus,
   Trash2,
+  ShieldBan,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -26,6 +27,8 @@ import {
   useGetUserEmailById,
   useSendFriendRequest,
   useRemoveFriend,
+  useBlockUser,
+  useBlockedUsers,
 } from "@/hooks/use-contact";
 import {
   useGetPrivateConversation,
@@ -68,6 +71,8 @@ export default function FriendProfilePage() {
   const { data: friend, isLoading, error } = useGetFriendProfile(userId);
   const { data: friendEmail } = useGetUserEmailById(userId);
   const { data: contactsData, isLoading: isLoadingContacts } = useContacts();
+  const { data: blockedUsersData, isLoading: isLoadingBlockedUsers } =
+    useBlockedUsers();
   const {
     mutate: getPrivateConversation,
     mutateAsync: getPrivateConversationAsync,
@@ -79,6 +84,7 @@ export default function FriendProfilePage() {
     useSendFriendRequest();
   const { mutate: removeFriend, isPending: isRemovingFriend } =
     useRemoveFriend();
+  const { mutate: blockUser, isPending: isBlockingUser } = useBlockUser();
   const [showRemoveConfirm, setShowRemoveConfirm] = useState(false);
   const [showShareDialog, setShowShareDialog] = useState(false);
   const [recipientQuery, setRecipientQuery] = useState("");
@@ -134,6 +140,21 @@ export default function FriendProfilePage() {
     { label: "Trường học", value: friend?.school },
     { label: "Tình trạng hôn nhân", value: friend?.maritalStatus },
   ].filter((item) => !!item.value?.trim());
+  const blockedUsers = blockedUsersData?.blockedUsers || [];
+  const isBlockedByCurrentUser = blockedUsers.some(
+    (blockedUser) => (blockedUser.id || blockedUser._id) === userId,
+  );
+  const errorStatusCode =
+    typeof (error as { response?: { status?: number } } | null)?.response
+      ?.status === "number"
+      ? ((error as { response?: { status?: number } }).response?.status as number)
+      : undefined;
+  const isProfileNotFound = Boolean(
+    isBlockedByCurrentUser ||
+      (!isLoading && !friend) ||
+      errorStatusCode === 403 ||
+      errorStatusCode === 404,
+  );
 
   const handleOpenChat = () => {
     if (!friend?.id || !friend.isFriend) return;
@@ -189,6 +210,20 @@ export default function FriendProfilePage() {
     });
   };
 
+  const handleBlockFriend = () => {
+    if (!friend?.id || isBlockingUser) return;
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn chặn ${friend.displayName}?`,
+    );
+    if (!confirmed) return;
+
+    blockUser(friend.id, {
+      onSuccess: () => {
+        router.back();
+      },
+    });
+  };
+
   return (
     <div className="flex w-full h-full bg-slate-50/50">
       <ScrollArea className="flex-1">
@@ -207,12 +242,19 @@ export default function FriendProfilePage() {
             </h1>
           </div>
 
-          {isLoading ? (
+          {isLoading || isLoadingBlockedUsers ? (
             <div className="flex items-center justify-center py-16 text-slate-500">
               <Loader2 className="w-6 h-6 mr-2 animate-spin" />
               Đang tải thông tin...
             </div>
-          ) : error || !friend ? (
+          ) : isProfileNotFound ? (
+            <div className="p-6 text-center bg-white border rounded-2xl border-slate-200 text-slate-500">
+              <p className="text-base font-semibold text-slate-800">Không tìm thấy trang</p>
+              <p className="mt-1 text-sm text-slate-500">
+                Trang cá nhân này không tồn tại hoặc bạn không có quyền truy cập.
+              </p>
+            </div>
+          ) : error ? (
             <div className="p-6 text-center bg-white border rounded-2xl border-slate-200 text-slate-500">
               Không thể tải thông tin trang cá nhân.
             </div>
@@ -266,7 +308,21 @@ export default function FriendProfilePage() {
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
+                                className="gap-2 text-amber-700 cursor-pointer focus:text-amber-700 focus:bg-amber-50"
+                                disabled={isBlockingUser || isRemovingFriend}
+                                onClick={handleBlockFriend}
+                              >
+                                {isBlockingUser ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <ShieldBan className="w-4 h-4" />
+                                )}
+                                {isBlockingUser ? "Đang chặn..." : "Chặn bạn bè"}
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
                                 className="gap-2 text-red-600 cursor-pointer focus:text-red-600 focus:bg-red-50"
+                                disabled={isBlockingUser || isRemovingFriend}
                                 onClick={() => setShowRemoveConfirm(true)}
                               >
                                 <Trash2 className="w-4 h-4" />
