@@ -6,6 +6,15 @@ export interface MessageAttachment {
   fileSize: number;
 }
 
+export interface MessageMusicInfo {
+  title?: string | null;
+  artist?: string | null;
+  url?: string | null;
+  coverUrl?: string | null;
+  duration?: number;
+  source?: string;
+}
+
 export interface MessageSenderInfo {
   _id?: string;
   id?: string;
@@ -65,6 +74,7 @@ export interface Message {
   editedAt?: Date | string;
   unsentAt?: Date | string;
   deletedFor?: string[];
+  musicInfo?: MessageMusicInfo;
   createdAt: Date | string;
   clientTempId?: string;
   status?: MessageStatus;

@@ -34,6 +34,9 @@ export interface Story {
   media: StoryMedia;
   reactions?: StoryReaction[];
   replyCount?: number;
+  musicUrl?: string | null;
+  musicTitle?: string | null;
+  musicArtist?: string | null;
   createdAt: Date;
   expiresAt: Date;
   isViewedByCurrentUser?: boolean;
