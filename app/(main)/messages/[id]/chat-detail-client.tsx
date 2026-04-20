@@ -14,7 +14,9 @@ import {
   Reply,
   Pin,
   Share2,
+  X,
 } from "lucide-react";
+
 import Image from "next/image";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -777,18 +779,19 @@ function MessageAttachmentItem({
 
   if (isImageType) {
     return (
-      <a href={resolvedUrl} target="_blank" rel="noreferrer" className="block">
+      <a href={resolvedUrl} target="_blank" rel="noreferrer" className="block overflow-hidden rounded-xl">
         <Image
           src={resolvedUrl}
           alt={attachment.fileName || "image"}
           width={320}
           height={200}
           unoptimized
-          className="h-auto w-full max-w-[260px] rounded-xl object-cover"
+          className="h-auto w-full max-w-[260px] rounded-xl object-cover transition-transform hover:scale-[1.02]"
         />
       </a>
     );
   }
+
 
   if (isAudioType) {
     return <AudioMessageBubble src={resolvedUrl} isMe={isMe} />;
@@ -1298,6 +1301,9 @@ export default function ChatDetailClient() {
   const [isSendingAttachment, setIsSendingAttachment] = useState(false);
   const [uploadProgressPercent, setUploadProgressPercent] = useState(0);
   const [uploadProgressLabel, setUploadProgressLabel] = useState("");
+  const [imagePreviews, setImagePreviews] = useState<{ file: File; previewUrl: string }[]>([]);
+  const [imagePreviewDialogOpen, setImagePreviewDialogOpen] = useState(false);
+  const pendingAttachmentFilesRef = useRef<File[]>([]);
   const [activeMessageActionsId, setActiveMessageActionsId] = useState<
     string | null
   >(null);
@@ -1999,7 +2005,8 @@ export default function ChatDetailClient() {
     }
   }, [selectedForwardConversationId, selectedForwardMessage, sendMessage]);
 
-  const handleSendAttachments = useCallback(
+
+  const handleSendAttachmentsInternal = useCallback(
     async (files: File[]) => {
       if (!files.length || !conversationId) return;
 
@@ -2016,10 +2023,63 @@ export default function ChatDetailClient() {
       setIsSendingAttachment(true);
       setUploadProgressPercent(0);
       try {
-        for (let index = 0; index < files.length; index += 1) {
-          const file = files[index];
+        // Group images together into one message, other file types sent individually
+        const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+        const otherFiles = files.filter((f) => !f.type.startsWith("image/"));
+
+        // Upload all images and send as a single message with multiple attachments
+        if (imageFiles.length > 0) {
+          const uploadedAttachments: { key: string; fileType: string; fileName: string; fileSize: number }[] = [];
+
+          for (let index = 0; index < imageFiles.length; index += 1) {
+            const file = imageFiles[index];
+            setUploadProgressLabel(
+              `Đang tải ảnh ${index + 1}/${imageFiles.length}: ${file.name}`,
+            );
+
+            const presign = await chatService.createChatUploadPresignPut({
+              fileName: file.name,
+              contentType: file.type || "image/jpeg",
+              fileSize: file.size,
+            });
+
+            await chatService.uploadToPresignedUrl(
+              presign.uploadUrl,
+              file,
+              (fileProgress) => {
+                const overall = Math.round(
+                  ((index + fileProgress / 100) / imageFiles.length) * 100 * (imageFiles.length / files.length),
+                );
+                setUploadProgressPercent(Math.min(overall, 90));
+              },
+            );
+
+            uploadedAttachments.push({
+              key: presign.key,
+              fileType: file.type || "image/jpeg",
+              fileName: file.name,
+              fileSize: file.size,
+            });
+          }
+
+          // Send all images as ONE message with multiple attachments
+          setUploadProgressLabel("Đang gửi ảnh...");
+          setUploadProgressPercent(95);
+          await sendMessage({
+            conversationId,
+            content: "",
+            type: "image",
+            replyToMessageId: replyingToMessageId || undefined,
+            attachments: uploadedAttachments,
+          });
+        }
+
+        // Send non-image files one by one
+        const imageCount = imageFiles.length;
+        for (let index = 0; index < otherFiles.length; index += 1) {
+          const file = otherFiles[index];
           setUploadProgressLabel(
-            `Đang tải ${index + 1}/${files.length}: ${file.name}`,
+            `Đang tải tệp ${index + 1}/${otherFiles.length}: ${file.name}`,
           );
 
           const presign = await chatService.createChatUploadPresignPut({
@@ -2032,10 +2092,12 @@ export default function ChatDetailClient() {
             presign.uploadUrl,
             file,
             (fileProgress) => {
+              const baseProgress = imageCount > 0 ? 95 : 0;
+              const fileShare = (1 / otherFiles.length) * (100 - baseProgress);
               const overall = Math.round(
-                ((index + fileProgress / 100) / files.length) * 100,
+                baseProgress + index * fileShare + (fileProgress / 100) * fileShare,
               );
-              setUploadProgressPercent(overall);
+              setUploadProgressPercent(Math.min(overall, 99));
             },
           );
 
@@ -2058,6 +2120,7 @@ export default function ChatDetailClient() {
             ],
           });
         }
+
         setReplyingToMessageId(null);
       } catch (error: unknown) {
         toast.error(
@@ -2070,8 +2133,56 @@ export default function ChatDetailClient() {
         setIsSendingAttachment(false);
       }
     },
-    [aiMode, blockedMessage, conversationId, isConversationBlocked, sendMessage],
+    [aiMode, blockedMessage, conversationId, isConversationBlocked, replyingToMessageId, sendMessage],
   );
+
+  const openImagePreview = useCallback(
+    (files: File[]) => {
+      if (!files.length) return;
+      // Show preview for image files; non-image files send directly
+      const imageFiles = files.filter((f) => f.type.startsWith("image/"));
+      const otherFiles = files.filter((f) => !f.type.startsWith("image/"));
+
+      if (imageFiles.length > 0) {
+        const previews = imageFiles.map((file) => ({
+          file,
+          previewUrl: URL.createObjectURL(file),
+        }));
+        pendingAttachmentFilesRef.current = [...imageFiles, ...otherFiles];
+        setImagePreviews(previews);
+        setImagePreviewDialogOpen(true);
+      } else {
+        // No images — send directly
+        void handleSendAttachmentsInternal(otherFiles);
+      }
+    },
+    [handleSendAttachmentsInternal],
+  );
+
+  const handleSendAttachments = useCallback(
+    async (files: File[]) => {
+      if (!files.length || !conversationId) return;
+
+      if (isConversationBlocked) {
+        toast.error(blockedMessage);
+        return;
+      }
+
+      if (aiMode) {
+        toast.info("Đoạn chat AI hiện chỉ hỗ trợ tin nhắn văn bản");
+        return;
+      }
+
+      const hasImages = files.some((f) => f.type.startsWith("image/"));
+      if (hasImages) {
+        openImagePreview(files);
+      } else {
+        await handleSendAttachmentsInternal(files);
+      }
+    },
+    [aiMode, blockedMessage, conversationId, isConversationBlocked, handleSendAttachmentsInternal, openImagePreview],
+  );
+
 
   const handleTyping = () => {
     if (aiMode) return;
@@ -2592,19 +2703,53 @@ export default function ChatDetailClient() {
                             </div>
                           )}
 
-                          {visibleAttachments.length > 0 && (
-                            <div className={msg.content ? "mb-2" : ""}>
-                              <div className="flex flex-col gap-2">
-                                {visibleAttachments.map((attachment, index) => (
-                                  <MessageAttachmentItem
-                                    key={`${attachment.key || attachment.url || attachment.fileName}-${index}`}
-                                    attachment={attachment}
-                                    isMe={isMe}
-                                  />
-                                ))}
+                          {visibleAttachments.length > 0 && (() => {
+                            const imageAttachments = visibleAttachments.filter((a) => {
+                              const t = String(a.fileType || "").toLowerCase();
+                              return t === "image" || t.startsWith("image/");
+                            });
+                            const otherAttachments = visibleAttachments.filter((a) => {
+                              const t = String(a.fileType || "").toLowerCase();
+                              return !(t === "image" || t.startsWith("image/"));
+                            });
+                            const isMultiImage = imageAttachments.length > 1;
+
+                            return (
+                              <div className={msg.content || otherAttachments.length > 0 ? "mb-2" : ""}>
+                                {/* Multi-image grid */}
+                                {imageAttachments.length > 0 && (
+                                  <div
+                                    className={
+                                      isMultiImage
+                                        ? `grid gap-1 ${imageAttachments.length === 2 ? "grid-cols-2" : "grid-cols-2 sm:grid-cols-3"}`
+                                        : "flex flex-col gap-2"
+                                    }
+                                  >
+                                    {imageAttachments.map((attachment, index) => (
+                                      <MessageAttachmentItem
+                                        key={`img-${attachment.key || attachment.url || attachment.fileName}-${index}`}
+                                        attachment={attachment}
+                                        isMe={isMe}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
+                                {/* Non-image files */}
+                                {otherAttachments.length > 0 && (
+                                  <div className={`flex flex-col gap-2 ${imageAttachments.length > 0 ? "mt-2" : ""}`}>
+                                    {otherAttachments.map((attachment, index) => (
+                                      <MessageAttachmentItem
+                                        key={`file-${attachment.key || attachment.url || attachment.fileName}-${index}`}
+                                        attachment={attachment}
+                                        isMe={isMe}
+                                      />
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          )}
+                            );
+                          })()}
+
                           {hasSharedPost && (
                             <div className={parsedContent ? "mb-1.5" : ""}>
                               <SharedPostPreview
@@ -3073,6 +3218,138 @@ export default function ChatDetailClient() {
               disabled={!selectedForwardConversationId || isForwarding}
             >
               {isForwarding ? "Đang chuyển tiếp..." : "Chuyển tiếp"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Image Preview Dialog ── */}
+      <Dialog
+        open={imagePreviewDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            // Cleanup object URLs
+            imagePreviews.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+            setImagePreviews([]);
+            pendingAttachmentFilesRef.current = [];
+            setImagePreviewDialogOpen(false);
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <span>Xem trước ảnh</span>
+              <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700">
+                {imagePreviews.length} ảnh
+              </span>
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="max-h-[60vh] overflow-y-auto">
+            {imagePreviews.length === 1 ? (
+              // Single image: full width preview
+              <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
+                <Image
+                  src={imagePreviews[0].previewUrl}
+                  alt={imagePreviews[0].file.name}
+                  width={640}
+                  height={400}
+                  unoptimized
+                  className="h-auto w-full max-h-[50vh] object-contain"
+                />
+                <div className="px-3 pb-2 pt-1.5 text-xs text-slate-500 truncate">
+                  {imagePreviews[0].file.name}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    URL.revokeObjectURL(imagePreviews[0].previewUrl);
+                    setImagePreviews([]);
+                    pendingAttachmentFilesRef.current = [];
+                    setImagePreviewDialogOpen(false);
+                  }}
+                  className="absolute right-2 top-2 rounded-full bg-black/50 p-1 text-white transition hover:bg-black/70"
+                  aria-label="Xóa ảnh"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ) : (
+              // Multiple images: responsive grid
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {imagePreviews.map((preview, index) => (
+                  <div
+                    key={`preview-${index}`}
+                    className="group relative overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
+                  >
+                    <Image
+                      src={preview.previewUrl}
+                      alt={preview.file.name}
+                      width={240}
+                      height={160}
+                      unoptimized
+                      className="h-36 w-full object-cover"
+                    />
+                    <div className="truncate px-2 pb-1.5 pt-1 text-[10px] text-slate-500">
+                      {preview.file.name}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        URL.revokeObjectURL(preview.previewUrl);
+                        const newPreviews = imagePreviews.filter((_, i) => i !== index);
+                        setImagePreviews(newPreviews);
+                        pendingAttachmentFilesRef.current = pendingAttachmentFilesRef.current.filter(
+                          (_, i) => i !== index,
+                        );
+                        if (newPreviews.length === 0) {
+                          setImagePreviewDialogOpen(false);
+                        }
+                      }}
+                      className="absolute right-1.5 top-1.5 rounded-full bg-black/50 p-1 text-white opacity-0 transition group-hover:opacity-100 hover:bg-black/70"
+                      aria-label="Xóa ảnh này"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {imagePreviews.length > 0 && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+              💡 Tất cả {imagePreviews.length} ảnh sẽ được gửi trong <strong>1 tin nhắn duy nhất</strong>. Khi thu hồi sẽ thu hồi toàn bộ.
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                imagePreviews.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+                setImagePreviews([]);
+                pendingAttachmentFilesRef.current = [];
+                setImagePreviewDialogOpen(false);
+              }}
+              disabled={isSendingAttachment}
+            >
+              Hủy
+            </Button>
+            <Button
+              onClick={async () => {
+                const files = pendingAttachmentFilesRef.current;
+                const previews = [...imagePreviews];
+                setImagePreviewDialogOpen(false);
+                previews.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+                setImagePreviews([]);
+                pendingAttachmentFilesRef.current = [];
+                await handleSendAttachmentsInternal(files);
+              }}
+              disabled={imagePreviews.length === 0 || isSendingAttachment}
+            >
+              {isSendingAttachment ? "Đang gửi..." : `Gửi ${imagePreviews.length} ảnh`}
             </Button>
           </DialogFooter>
         </DialogContent>
