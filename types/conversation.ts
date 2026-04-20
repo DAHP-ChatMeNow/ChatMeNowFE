@@ -1,3 +1,5 @@
+import type { MessageSenderInfo } from "./message";
+
 export interface ConversationMember {
   userId: string;
   joinedAt: Date;
@@ -13,7 +15,7 @@ export interface ConversationMemberSetting {
 export interface LastMessage {
   content?: string;
   type?: string;
-  senderId?: string;
+  senderId?: string | MessageSenderInfo;
   senderSource?: "user" | "ai";
   senderName?: string;
   pinManagementEnabled?: boolean;
