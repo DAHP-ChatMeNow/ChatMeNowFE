@@ -590,7 +590,7 @@ export function ChatInput({
             <Smile className="w-5 h-5" />
           </button>
           {mentionMenuOpen && (
-            <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+            <div className="absolute bottom-full left-0 right-0 z-30 mb-2 max-h-56 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
               {mentionSuggestions.length === 0 ? (
                 <div className="rounded-xl px-3 py-2 text-sm text-slate-500">
                   Không tìm thấy thành viên

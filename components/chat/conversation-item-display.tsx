@@ -38,6 +38,13 @@ const getMemberUserId = (
   return member.userId?._id || member.userId?.id;
 };
 
+const getLastMessageSenderId = (conversation: Conversation): string | undefined => {
+  const sender = conversation.lastMessage?.senderId;
+  if (!sender) return undefined;
+  if (typeof sender === "string") return sender;
+  return sender._id || sender.id;
+};
+
 const formatLastMessagePreview = (conversation: Conversation): string => {
   const lastMessage = conversation.lastMessage;
   if (!lastMessage) return "Chưa có tin nhắn";
@@ -135,8 +142,38 @@ export function ConversationItemDisplay({
     conversation.type === "group" ? typedConversation.members.length : 0;
 
   const unreadCount = Number(conversation.unreadCount || 0);
-  const safeUnreadCount =
+  const normalizedUnreadCount =
     Number.isFinite(unreadCount) && unreadCount > 0 ? Math.floor(unreadCount) : 0;
+  const fallbackUnreadByLastReadAt = (() => {
+    if (normalizedUnreadCount > 0) return 0;
+    if (!currentUserId) return 0;
+
+    const lastMessage = conversation.lastMessage;
+    if (!lastMessage?.createdAt) return 0;
+    const hasMentionSyntax = /(^|\s)@[^\s@]+/.test(String(lastMessage.content || ""));
+    if (!hasMentionSyntax) return 0;
+
+    const lastMessageSenderId = getLastMessageSenderId(conversation);
+    if (lastMessageSenderId && lastMessageSenderId === currentUserId) return 0;
+
+    const currentMember = typedConversation.members.find(
+      (member) => getMemberUserId(member) === currentUserId,
+    );
+
+    const messageTimestamp = new Date(lastMessage.createdAt).getTime();
+    if (!Number.isFinite(messageTimestamp) || messageTimestamp <= 0) return 0;
+
+    const lastReadTimestamp = currentMember?.lastReadAt
+      ? new Date(currentMember.lastReadAt).getTime()
+      : 0;
+
+    // If member has never read, or latest message is newer than lastReadAt,
+    // keep conversation visually unread even when unreadCount is temporarily stale.
+    return !Number.isFinite(lastReadTimestamp) || messageTimestamp > lastReadTimestamp
+      ? 1
+      : 0;
+  })();
+  const safeUnreadCount = Math.max(normalizedUnreadCount, fallbackUnreadByLastReadAt);
   const handleOpenConversation = () => {
     if (safeUnreadCount <= 0) return;
 
