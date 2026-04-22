@@ -8,7 +8,7 @@ import {
   useState,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { chatService, UpdateAiAdminConfigPayload } from "@/api/chat";
+import { chatService, UpdateAiAdminConfigPayload } from "@/services/chat";
 import { toast } from "sonner";
 import {
   Bot,
@@ -224,23 +224,6 @@ export default function AdminAiPage() {
             Cập nhật thông tin bot AI, bật/tắt AI chat và theo dõi usage.
           </p>
         </div>
-
-        <Button
-          variant="outline"
-          onClick={() => {
-            queryClient.invalidateQueries({
-              queryKey: ["admin", "ai", "config"],
-            });
-            refetchStats();
-          }}
-          disabled={isFetchingConfig || isFetchingStats}
-          className="gap-2"
-        >
-          <RefreshCw
-            className={`h-4 w-4 ${isFetchingConfig || isFetchingStats ? "animate-spin" : ""}`}
-          />
-          Làm mới
-        </Button>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
