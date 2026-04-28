@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState } from "react";
-import { Clock3, Crown, Loader2, ReceiptText } from "lucide-react";
+import { ChevronLeft, ChevronRight, Clock3, Crown, Loader2, ReceiptText } from "lucide-react";
 import { usePremiumHistory } from "@/hooks/use-premium";
 
 const LIMIT = 10;
@@ -47,20 +46,6 @@ export default function PremiumHistoryPage() {
             <p className="mt-1 text-sm text-slate-600">
               Theo dõi các giao dịch nâng cấp gói và trạng thái thanh toán.
             </p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/settings/premium"
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
-            >
-              Premium của tôi
-            </Link>
-            <Link
-              href="/settings/premium/plans"
-              className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
-            >
-              Danh sách gói
-            </Link>
           </div>
         </div>
       </section>
@@ -127,19 +112,22 @@ export default function PremiumHistoryPage() {
             </table>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-            <p className="text-sm text-slate-600">
-              Trang <span className="font-semibold text-slate-900">{data.page}</span>/{totalPages} - Tổng{" "}
-              <span className="font-semibold text-slate-900">{data.total}</span> giao dịch
-            </p>
+          <div className="flex flex-wrap items-end justify-between gap-3 border-t border-slate-200 px-1 pt-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Trang</p>
+              <p className="text-sm font-semibold text-slate-900">
+                {data.page}/{totalPages}
+              </p>
+            </div>
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setPage((prev) => Math.max(prev - 1, 1))}
                 disabled={page <= 1}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Trước
+                <ChevronLeft className="h-4 w-4" />
+                Trái
               </button>
               <button
                 type="button"
@@ -149,9 +137,10 @@ export default function PremiumHistoryPage() {
                   )
                 }
                 disabled={page >= totalPages}
-                className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex items-center gap-1 border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Sau
+                Phải
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>
