@@ -428,6 +428,14 @@ const resolveForwardPartner = (
   });
 };
 
+const getForwardMemberUserProfile = (
+  member?: ForwardConversationMember,
+): { displayName?: string; avatar?: string } | undefined => {
+  const rawUser = member?.userId;
+  if (!rawUser || typeof rawUser === "string") return undefined;
+  return rawUser;
+};
+
 const getConversationForwardLabel = (
   conversation: ForwardConversationLike,
   currentUserId?: string,
@@ -438,9 +446,10 @@ const getConversationForwardLabel = (
   if (conversation?.type === "group") return "Nhóm chat";
   if (conversation?.type === "private") {
     const partner = resolveForwardPartner(conversation, currentUserId);
+    const partnerUserProfile = getForwardMemberUserProfile(partner);
 
     const partnerName = String(
-      partner?.userId?.displayName ||
+      partnerUserProfile?.displayName ||
         partner?.displayName ||
         conversation?.partner?.displayName ||
         conversation?.otherUser?.displayName ||
@@ -464,9 +473,10 @@ const getConversationForwardAvatar = (
   if (partnerAvatar) return partnerAvatar;
 
   const partner = resolveForwardPartner(conversation, currentUserId);
+  const partnerUserProfile = getForwardMemberUserProfile(partner);
 
   return String(
-    partner?.userId?.avatar || partner?.avatar || conversation?.avatar || "",
+    partnerUserProfile?.avatar || partner?.avatar || conversation?.avatar || "",
   ).trim();
 };
 
