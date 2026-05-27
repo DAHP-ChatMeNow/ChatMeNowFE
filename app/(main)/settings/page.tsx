@@ -31,20 +31,34 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/contexts/language-context";
-import { useBlockedUsers, useUnblockUser } from "@/hooks/use-contact";
+import {
+  useBlockedUsers,
+  useRestrictedUsers,
+  useUnblockUser,
+  useUnrestrictUser,
+} from "@/hooks/use-contact";
 import {
   useConfirmAccountLock,
   useSendAccountLockOtp,
   useVerifyAccountLockOtp,
 } from "@/hooks/use-auth";
+import { useUpdateProfile } from "@/hooks/use-profile";
 import { userService } from "@/services/user";
 import { useActivityHistory } from "@/hooks/use-user";
 import { isAxiosError } from "axios";
 import { toast } from "sonner";
+import { MessageReceiveSetting } from "@/types/user";
 
 function timeAgo(date: Date | string | number) {
   if (!date) return "";
@@ -106,6 +120,36 @@ const asText = (value: unknown, fallback = ""): string => {
   return fallback;
 };
 
+const MESSAGE_PERMISSION_OPTIONS: Array<{
+  value: MessageReceiveSetting;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "all",
+    label: "Tất cả",
+    description: "Ai cũng có thể nhắn tin trực tiếp cho bạn.",
+  },
+  {
+    value: "friends",
+    label: "Bạn bè",
+    description: "Người lạ sẽ đi vào danh sách chờ và chỉ gửi tối đa 3 tin.",
+  },
+  {
+    value: "none",
+    label: "Không nhận tin",
+    description:
+      "Tin nhắn mới sẽ đi vào danh sách chờ, kể cả khi chưa muốn mở chat ngay.",
+  },
+];
+
+const getMessagePermissionLabel = (value?: MessageReceiveSetting) => {
+  return (
+    MESSAGE_PERMISSION_OPTIONS.find((option) => option.value === value)?.label ||
+    "Tất cả"
+  );
+};
+
 // ─── Main Page ──────────────────────────────────────────────────────────────
 export default function SettingsPage() {
   const router = useRouter();
@@ -114,21 +158,32 @@ export default function SettingsPage() {
   const { language, setLanguage, t } = useLanguage();
   const { data: blockedUsersData, isLoading: isLoadingBlockedUsers } =
     useBlockedUsers();
+  const { data: restrictedUsersData, isLoading: isLoadingRestrictedUsers } =
+    useRestrictedUsers();
   const unblockUserMutation = useUnblockUser();
+  const unrestrictUserMutation = useUnrestrictUser();
   const { mutate: sendLockOtp, isPending: isSendingLockOtp } =
     useSendAccountLockOtp();
   const { mutate: verifyLockOtp, isPending: isVerifyingLockOtp } =
     useVerifyAccountLockOtp();
   const { mutate: confirmAccountLock, isPending: isConfirmingLock } =
     useConfirmAccountLock();
+  const { mutate: updateProfile, isPending: isUpdatingProfile } =
+    useUpdateProfile();
   const { data: activityData, isLoading: isLoadingActivity } = useActivityHistory(20);
 
   const [showLanguageDialog, setShowLanguageDialog] = useState(false);
+  const [showMessagePermissionDialog, setShowMessagePermissionDialog] =
+    useState(false);
   const [showChangePassword, setShowChangePassword] = useState(false);
   const [showPhoneDialog, setShowPhoneDialog] = useState(false);
   const [showActivity, setShowActivity] = useState(false);
   const [showBlockedDialog, setShowBlockedDialog] = useState(false);
+  const [showRestrictedDialog, setShowRestrictedDialog] = useState(false);
+  const [showPrivacyOptions, setShowPrivacyOptions] = useState(false);
   const [showLockDialog, setShowLockDialog] = useState(false);
+  const [messageReceiveSetting, setMessageReceiveSetting] =
+    useState<MessageReceiveSetting>(() => user?.messageReceiveSetting || "all");
   const [activityTab, setActivityTab] = useState<"video" | "liked" | "commented">("video");
   const [lockStep, setLockStep] = useState<1 | 2 | 3>(1);
   const [lockOtp, setLockOtp] = useState("");
@@ -150,6 +205,7 @@ export default function SettingsPage() {
   const [phone, setPhone] = useState(user?.phone || "");
   const [isSavingPhone, setIsSavingPhone] = useState(false);
   const blockedUsers = blockedUsersData?.blockedUsers || [];
+  const restrictedUsers = restrictedUsersData?.restrictedUsers || [];
   const lockOtpInputRefs = useRef<Array<HTMLInputElement | null>>([]);
   const [resolvedEmail, setResolvedEmail] = useState(user?.email || "");
   const effectiveEmail = user?.email || resolvedEmail;
@@ -214,6 +270,17 @@ export default function SettingsPage() {
     setIsSavingPhone(false);
     toast.success("Cập nhật số điện thoại thành công!");
     setShowPhoneDialog(false);
+  };
+
+  const handleSaveMessagePermission = () => {
+    updateProfile(
+      { messageReceiveSetting },
+      {
+        onSuccess: () => {
+          setShowMessagePermissionDialog(false);
+        },
+      },
+    );
   };
 
   const handleSendLockOtp = () => {
@@ -502,16 +569,50 @@ export default function SettingsPage() {
               iconColor="text-blue-500"
               label={t.privacy}
               description="Quyền riêng tư, khoá ứng dụng"
+              onClick={() => setShowPrivacyOptions((prev) => !prev)}
+              rightSlot={
+                <ChevronRight
+                  className={`h-4 w-4 text-slate-300 transition-transform ${
+                    showPrivacyOptions ? "rotate-90" : ""
+                  }`}
+                />
+              }
             />
-            <SettingItem
-              icon={ShieldBan}
-              iconBg="bg-red-50 dark:bg-red-900/20"
-              iconColor="text-red-500"
-              label="Người đã chặn"
-              description="Xem danh sách và mở chặn người dùng"
-              badge={String(blockedUsers.length)}
-              onClick={() => setShowBlockedDialog(true)}
-            />
+            {showPrivacyOptions && (
+              <div className="mx-3 mb-2 rounded-xl border border-slate-200/80 bg-slate-50/70">
+                <SettingItem
+                  icon={MessageCircle}
+                  iconBg="bg-cyan-50 dark:bg-cyan-900/20"
+                  iconColor="text-cyan-500"
+                  label="Quyền nhận tin nhắn"
+                  description={`Hiện tại: ${getMessagePermissionLabel(
+                    user?.messageReceiveSetting,
+                  )}`}
+                  onClick={() => {
+                    setMessageReceiveSetting(user?.messageReceiveSetting || "all");
+                    setShowMessagePermissionDialog(true);
+                  }}
+                />
+                <SettingItem
+                  icon={ShieldBan}
+                  iconBg="bg-amber-50 dark:bg-amber-900/20"
+                  iconColor="text-amber-500"
+                  label="Danh sách hạn chế"
+                  description="Người bị hạn chế sẽ nằm ở danh sách chờ"
+                  badge={String(restrictedUsers.length)}
+                  onClick={() => setShowRestrictedDialog(true)}
+                />
+                <SettingItem
+                  icon={ShieldBan}
+                  iconBg="bg-red-50 dark:bg-red-900/20"
+                  iconColor="text-red-500"
+                  label="Người đã chặn"
+                  description="Xem danh sách và mở chặn người dùng"
+                  badge={String(blockedUsers.length)}
+                  onClick={() => setShowBlockedDialog(true)}
+                />
+              </div>
+            )}
             <div
               onClick={() => setShowLanguageDialog(true)}
               className="flex items-center justify-between p-4 transition-all cursor-pointer md:p-5 hover:bg-slate-50 dark:hover:bg-slate-700/50 group"
@@ -572,6 +673,86 @@ export default function SettingsPage() {
                 {language === lang && <Check className="w-4 h-4" />}
               </button>
             ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showMessagePermissionDialog}
+        onOpenChange={setShowMessagePermissionDialog}
+      >
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-sm rounded-2xl bg-white dark:bg-slate-800">
+          <DialogHeader>
+            <DialogTitle className="dark:text-white">
+              Quyền nhận tin nhắn
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <p className="text-sm text-slate-500 dark:text-slate-300">
+                Chọn ai có thể nhắn tin trực tiếp cho bạn. Người lạ hoặc các
+                cuộc trò chuyện chưa được chấp nhận sẽ nằm trong danh sách chờ.
+              </p>
+              <Select
+                value={messageReceiveSetting}
+                onValueChange={(value) =>
+                  setMessageReceiveSetting(value as MessageReceiveSetting)
+                }
+              >
+                <SelectTrigger className="h-11 rounded-xl dark:border-slate-700 dark:bg-slate-900 dark:text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {MESSAGE_PERMISSION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              {MESSAGE_PERMISSION_OPTIONS.map((option) => {
+                const isActive = option.value === messageReceiveSetting;
+
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setMessageReceiveSetting(option.value)}
+                    className={`w-full rounded-xl border p-3 text-left transition ${
+                      isActive
+                        ? "border-blue-500 bg-blue-50"
+                        : "border-slate-200 bg-slate-50 hover:border-slate-300"
+                    }`}
+                  >
+                    <p className="text-sm font-semibold text-slate-900">
+                      {option.label}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-slate-500">
+                      {option.description}
+                    </p>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowMessagePermissionDialog(false)}
+                disabled={isUpdatingProfile}
+              >
+                Hủy
+              </Button>
+              <Button
+                onClick={handleSaveMessagePermission}
+                disabled={isUpdatingProfile}
+              >
+                {isUpdatingProfile ? "Đang lưu..." : "Lưu thay đổi"}
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1114,6 +1295,76 @@ export default function SettingsPage() {
       </Dialog>
 
       {/* Blocked users */}
+      <Dialog open={showRestrictedDialog} onOpenChange={setShowRestrictedDialog}>
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-lg bg-white dark:bg-slate-800 h-[85vh] md:h-[80vh] flex flex-col p-0 gap-0 rounded-2xl">
+          <DialogHeader className="px-5 pt-5 pb-0 shrink-0">
+            <DialogTitle className="flex items-center gap-2 dark:text-white">
+              <ShieldBan className="w-5 h-5 text-amber-500" />
+              Danh sách hạn chế
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-5 pt-3 shrink-0">
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              Người trong danh sách này vẫn có thể xuất hiện, nhưng cuộc trò chuyện sẽ ở danh sách chờ cho đến khi bạn chấp nhận.
+            </p>
+          </div>
+          <ScrollArea className="flex-1 min-h-0">
+            <div className="px-5 py-4 space-y-3">
+              {isLoadingRestrictedUsers ? (
+                <div className="py-14 text-sm text-center text-slate-400">
+                  Đang tải danh sách...
+                </div>
+              ) : restrictedUsers.length === 0 ? (
+                <div className="py-14 text-sm text-center text-slate-400">
+                  Bạn chưa hạn chế ai cả
+                </div>
+              ) : (
+                restrictedUsers.map((restrictedUser) => (
+                  <div
+                    key={restrictedUser.id || restrictedUser._id}
+                    className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3 dark:bg-slate-700/50"
+                  >
+                    <PresignedAvatar
+                      avatarKey={restrictedUser.avatar}
+                      displayName={restrictedUser.displayName}
+                      className="h-12 w-12 shrink-0"
+                      fallbackClassName="text-sm font-bold"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-white">
+                        {restrictedUser.displayName}
+                      </p>
+                      <p className="mt-0.5 truncate text-xs text-slate-400">
+                        {restrictedUser.bio || "Người dùng đang bị hạn chế"}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={unrestrictUserMutation.isPending}
+                      onClick={() =>
+                        unrestrictUserMutation.mutate(
+                          restrictedUser.id || restrictedUser._id || "",
+                        )
+                      }
+                      className="shrink-0 border-slate-200 text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700"
+                    >
+                      Bỏ hạn chế
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+          <div className="border-t border-slate-100 px-5 py-3 dark:border-slate-700 shrink-0">
+            <p className="text-center text-[11px] text-slate-400">
+              Hạn chế không chặn hẳn người dùng, nhưng sẽ giữ cuộc trò chuyện ở danh sách chờ.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Blocked users */}
       <Dialog open={showBlockedDialog} onOpenChange={setShowBlockedDialog}>
         <DialogContent className="w-[calc(100vw-1rem)] max-w-lg bg-white dark:bg-slate-800 h-[85vh] md:h-[80vh] flex flex-col p-0 gap-0 rounded-2xl">
           <DialogHeader className="px-5 pt-5 pb-0 shrink-0">
@@ -1213,6 +1464,7 @@ function SettingItem({
   description,
   badge,
   onClick,
+  rightSlot,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   iconBg?: string;
@@ -1221,6 +1473,7 @@ function SettingItem({
   description: string;
   badge?: string;
   onClick?: () => void;
+  rightSlot?: React.ReactNode;
 }) {
   return (
     <div
@@ -1252,9 +1505,11 @@ function SettingItem({
             {badge}
           </span>
         )}
-        {onClick && (
+        {rightSlot ? (
+          rightSlot
+        ) : onClick ? (
           <ChevronRight className="w-4 h-4 transition-transform text-slate-300 dark:text-slate-600 group-hover:translate-x-1" />
-        )}
+        ) : null}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ interface ChatItemProps {
   name: string;
   avatar?: string;
   lastMsg: string;
+  statusLabel?: string;
   time: string;
   unread: number;
   isActive: boolean;
@@ -126,6 +127,7 @@ export function ChatItem({
   name,
   avatar,
   lastMsg,
+  statusLabel,
   time,
   unread,
   isActive,
@@ -145,10 +147,10 @@ export function ChatItem({
   return (
     <Link href={`/messages/${id}`} onClick={onOpenConversation}>
       <div
-        className={`flex items-center gap-3 p-3 mx-2 md:mx-3 rounded-2xl cursor-pointer border transition-colors duration-150 ${
+        className={`mx-2 flex cursor-pointer items-center gap-3 rounded-2xl border p-3 transition-all duration-200 md:mx-3 ${
           isActive
-            ? "bg-blue-50/80 border-blue-200 shadow-sm"
-            : "bg-transparent border-slate-100 hover:bg-white hover:border-slate-200"
+            ? "border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-sm"
+            : "border-transparent bg-white/70 hover:-translate-y-0.5 hover:border-slate-200 hover:bg-white hover:shadow-sm"
         } ${isBlocked ? "opacity-80" : ""}`}
       >
         <div className="relative">
@@ -179,7 +181,7 @@ export function ChatItem({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex justify-between items-baseline mb-0.5">
+          <div className="mb-0.5 flex justify-between items-baseline">
             <h4
               className={`text-[15px] truncate ${
                 isActive
@@ -193,20 +195,27 @@ export function ChatItem({
             </h4>
             <span
               className={`text-[11px] ${
-                hasUnread ? "text-blue-600 font-semibold" : "text-slate-400 font-medium"
+                hasUnread ? "font-semibold text-blue-600" : "font-medium text-slate-400"
               }`}
             >
               {time}
             </span>
           </div>
           <div className="flex justify-between items-center">
-            <p
-              className={`text-[13px] truncate pr-2 ${
-                hasUnread ? "text-slate-900 font-semibold" : "text-slate-500"
-              }`}
-            >
-              {blockedLabel || lastMsg}
-            </p>
+            <div className="min-w-0 pr-2">
+              {statusLabel ? (
+                <span className="mb-1 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                  {statusLabel}
+                </span>
+              ) : null}
+              <p
+                className={`truncate text-[13px] ${
+                  hasUnread ? "font-semibold text-slate-800" : "text-slate-500"
+                }`}
+              >
+                {blockedLabel || lastMsg}
+              </p>
+            </div>
             {hasUnread && (
               <Badge className="bg-blue-600 hover:bg-blue-600 h-5 min-w-[20px] rounded-full text-[10px] flex items-center justify-center p-0">
                 {safeUnread > 99 ? "99+" : safeUnread}

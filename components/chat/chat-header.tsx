@@ -22,6 +22,7 @@ import {
   UserPlus,
   UserCircle2,
   ShieldBan,
+  ShieldAlert,
   LogOut,
   Sparkles,
   FileText,
@@ -34,6 +35,7 @@ import {
   Send,
 } from "lucide-react";
 import { useRouter, useParams } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import {
   DropdownMenu,
@@ -78,6 +80,7 @@ import {
 import { useAuthStore } from "@/store/use-auth-store";
 import {
   useBlockUser,
+  useRestrictUser,
   useUnblockUser,
   useContacts,
   useGetFriendProfile,
@@ -101,7 +104,12 @@ import { isShareCardSource } from "@/lib/share-card";
 import { User } from "@/types/user";
 import { UnreadSummaryDialog } from "@/components/chat/unread-summary-dialog";
 import { usePresignedUrl } from "@/hooks/use-profile";
-import { chatService, type PinnedMessageItem } from "@/services/chat";
+import {
+  chatService,
+  type ConversationsResponse,
+  type MessagesResponse,
+  type PinnedMessageItem,
+} from "@/services/chat";
 import { toast } from "sonner";
 import { QRCodeCanvas } from "qrcode.react";
 import { buildPublicAppUrl } from "@/types/utils";
@@ -188,25 +196,25 @@ function GroupCompositeAvatar({
           <div className="absolute left-1/2 top-[6%] h-[46%] w-[46%] -translate-x-1/2">
             <GroupAvatarTile
               member={visibleMembers[0]}
-              className="h-full w-full border-2 border-white shadow-sm"
+              className="w-full h-full border-2 border-white shadow-sm"
             />
           </div>
           <div className="absolute left-[8%] top-[48%] h-[46%] w-[46%]">
             <GroupAvatarTile
               member={visibleMembers[1]}
-              className="h-full w-full border-2 border-white shadow-sm"
+              className="w-full h-full border-2 border-white shadow-sm"
             />
           </div>
           <div className="absolute right-[8%] top-[48%] h-[46%] w-[46%]">
             <GroupAvatarTile
               member={visibleMembers[2]}
-              className="h-full w-full border-2 border-white shadow-sm"
+              className="w-full h-full border-2 border-white shadow-sm"
             />
           </div>
         </div>
       ) : hasSquareLayout ? (
         <div className="absolute inset-0">
-          {visibleMembers.map((member, index) => (
+          {visibleMembers.map((member, index) =>
             totalCount >= 5 && index === 3 ? (
               <span
                 key="group-extra-count"
@@ -228,16 +236,15 @@ function GroupCompositeAvatar({
                         : "right-[6%] bottom-[8%]"
                 }`}
               />
-            )
-          ))}
+            ),
+          )}
         </div>
       ) : (
         <GroupAvatarTile
           member={visibleMembers[0] ?? { userId: "group", displayName: "G" }}
-          className="h-full w-full"
+          className="w-full h-full"
         />
       )}
-
     </div>
   );
 }
@@ -267,9 +274,7 @@ function GroupMemberCard({
   const canSendFriendRequest = !isFriend && !isCheckingFriend;
 
   return (
-    <div
-      className="px-3 py-2.5 bg-white border shadow-sm rounded-2xl border-slate-200"
-    >
+    <div className="px-3 py-2.5 bg-white border shadow-sm rounded-2xl border-slate-200">
       <div className="flex items-center justify-between gap-2.5">
         <div className="flex items-center flex-1 min-w-0 gap-2.5 text-left">
           <PresignedAvatar
@@ -294,7 +299,7 @@ function GroupMemberCard({
               <Button
                 size="icon"
                 variant="outline"
-                className="w-7 h-7 rounded-full border-slate-300 bg-white shadow-sm hover:bg-slate-100"
+                className="bg-white rounded-full shadow-sm w-7 h-7 border-slate-300 hover:bg-slate-100"
                 disabled={transferring || removing}
                 aria-label={`Tùy chọn thành viên ${member.displayName}`}
                 onClick={(event) => event.stopPropagation()}
@@ -458,6 +463,7 @@ export function ChatHeader({
   onSummaryOpenChange?: Dispatch<SetStateAction<boolean>>;
 }) {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const params = useParams();
   const currentId = params?.id as string | undefined;
   const { data: conversation } = useConversation(currentId || "");
@@ -470,6 +476,7 @@ export function ChatHeader({
   const { data: contactsData } = useContacts();
   const contacts = contactsData?.contacts || [];
   const blockUserMutation = useBlockUser();
+  const restrictUserMutation = useRestrictUser();
   const unblockUserMutation = useUnblockUser();
   const createGroupMutation = useCreateConversation();
   const { startCall, startGroupCall, isBusy } = useVideoCall();
@@ -506,6 +513,7 @@ export function ChatHeader({
     [],
   );
   const [clearHistoryConfirmOpen, setClearHistoryConfirmOpen] = useState(false);
+  const [isSchedulingClear, setIsSchedulingClear] = useState(false);
   const [backgroundOpen, setBackgroundOpen] = useState(false);
   const [selectedBackground, setSelectedBackground] =
     useState<ChatBackgroundKey>("default");
@@ -517,6 +525,71 @@ export function ChatHeader({
 
   const addMemberMutation = useAddMemberToGroup();
   const clearConversationHistoryMutation = useClearConversationHistory();
+  const pendingClearTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
+  const pendingClearCountdownRef = useRef<ReturnType<
+    typeof setInterval
+  > | null>(null);
+  const pendingClearToastIdRef = useRef<string | number>(
+    "pending-clear-history",
+  );
+  const pendingClearSnapshotRef = useRef<{
+    conversationId: string;
+    previousMessages?: MessagesResponse;
+    previousConversations?: ConversationsResponse;
+  } | null>(null);
+  const CLEAR_HISTORY_UNDO_MS = 5000;
+
+  const restoreClearedConversationSnapshot = useCallback(() => {
+    const snapshot = pendingClearSnapshotRef.current;
+    if (!snapshot) return;
+
+    if (snapshot.previousMessages) {
+      queryClient.setQueryData(
+        ["messages", snapshot.conversationId],
+        snapshot.previousMessages,
+      );
+    }
+
+    if (snapshot.previousConversations) {
+      queryClient.setQueryData(
+        ["conversations"],
+        snapshot.previousConversations,
+      );
+    }
+  }, [queryClient]);
+
+  const undoPendingClearHistory = useCallback(() => {
+    if (pendingClearTimeoutRef.current) {
+      clearTimeout(pendingClearTimeoutRef.current);
+      pendingClearTimeoutRef.current = null;
+    }
+    if (pendingClearCountdownRef.current) {
+      clearInterval(pendingClearCountdownRef.current);
+      pendingClearCountdownRef.current = null;
+    }
+    toast.dismiss(pendingClearToastIdRef.current);
+
+    restoreClearedConversationSnapshot();
+    pendingClearSnapshotRef.current = null;
+    setIsSchedulingClear(false);
+    toast.success("Đã hoàn tác xóa đoạn chat");
+  }, [restoreClearedConversationSnapshot]);
+
+  useEffect(() => {
+    return () => {
+      if (pendingClearSnapshotRef.current) {
+        return;
+      }
+      if (pendingClearTimeoutRef.current) {
+        clearTimeout(pendingClearTimeoutRef.current);
+      }
+      if (pendingClearCountdownRef.current) {
+        clearInterval(pendingClearCountdownRef.current);
+      }
+    };
+  }, []);
   const leaveGroupMutation = useLeaveGroup();
   const removeMemberMutation = useRemoveMemberFromGroup();
   const transferAdminMutation = useTransferGroupAdmin();
@@ -950,7 +1023,7 @@ export function ChatHeader({
 
   return (
     <>
-      <div className="h-[70px] md:h-[80px] border-b border-slate-200/60 bg-white/80 backdrop-blur-xl sticky top-0 z-30 shadow-sm px-3 md:px-6">
+      <div className="sticky top-0 z-30 h-[70px] border-b border-slate-200/70 bg-white/85 px-3 shadow-sm backdrop-blur-xl md:h-[80px] md:px-6">
         <div className="flex items-center justify-between w-full max-w-[1240px] h-full mx-auto">
           <div
             onClick={handleOpenFriendProfile}
@@ -1000,7 +1073,7 @@ export function ChatHeader({
                       event.stopPropagation();
                       openRenameDialog();
                     }}
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600"
+                    className="inline-flex items-center justify-center w-6 h-6 transition-colors rounded-md shrink-0 text-slate-400 hover:bg-slate-100 hover:text-blue-600"
                     title="Đổi tên nhóm"
                     aria-label="Đổi tên nhóm"
                   >
@@ -1011,7 +1084,8 @@ export function ChatHeader({
               <p className="text-[11px] md:text-[12px] text-slate-400 font-medium truncate">
                 {conversation?.type === "group"
                   ? `Thành viên ${groupMemberCount}`
-                  : statusText || (isOnline ? "Đang hoạt động" : "Vừa truy cập")}
+                  : statusText ||
+                    (isOnline ? "Đang hoạt động" : "Vừa truy cập")}
               </p>
             </div>
           </div>
@@ -1022,7 +1096,7 @@ export function ChatHeader({
               onClick={() => {
                 void handleStartCall("audio");
               }}
-              className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl border border-transparent p-2.5 text-slate-400 transition-all duration-200 hover:scale-105 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               title={
                 canCall ? "Gọi audio" : "Không thể gọi ở cuộc trò chuyện này"
               }
@@ -1034,7 +1108,7 @@ export function ChatHeader({
               onClick={() => {
                 void handleStartCall("video");
               }}
-              className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl border border-transparent p-2.5 text-slate-400 transition-all duration-200 hover:scale-105 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
               title={
                 canCall ? "Gọi video" : "Không thể gọi ở cuộc trò chuyện này"
               }
@@ -1045,7 +1119,7 @@ export function ChatHeader({
               <button
                 type="button"
                 onClick={() => setInviteOpen(true)}
-                className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105"
+                className="rounded-xl border border-transparent p-2.5 text-slate-400 transition-all duration-200 hover:scale-105 hover:border-blue-100 hover:bg-blue-50 hover:text-blue-600"
                 title="Thêm thành viên"
               >
                 <UserPlus className="w-5 h-5" />
@@ -1053,89 +1127,92 @@ export function ChatHeader({
             )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <button className="p-2.5 text-slate-400 hover:bg-slate-100 rounded-xl transition-all duration-200">
+                <button className="rounded-xl border border-transparent p-2.5 text-slate-400 transition-all duration-200 hover:border-slate-200 hover:bg-slate-100">
                   <MoreVertical className="w-5 h-5" />
                 </button>
               </DropdownMenuTrigger>
               <DropdownMenuContent
                 align="end"
                 sideOffset={8}
-                className="w-64 rounded-xl border-slate-200/80 bg-white/95 backdrop-blur-md shadow-xl p-1.5"
+                className="p-2 border shadow-xl w-72 rounded-2xl border-slate-200/80 bg-white/95 backdrop-blur-md"
               >
-                <DropdownMenuLabel className="px-3 py-2 text-xs font-semibold tracking-wide uppercase text-slate-500">
+                <DropdownMenuLabel className="px-3 pb-2 pt-1 text-[11px] font-bold uppercase tracking-wide text-slate-400">
                   Tùy chọn chat
                 </DropdownMenuLabel>
                 <DropdownMenuItem
-                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                   onClick={() => {
                     setSheetTab("assets");
                     setSheetOpen(true);
                   }}
                 >
-                  <FileText className="text-slate-500" /> Xem ảnh/tệp/link đã
-                  gửi
+                  <FileText className="w-4 h-4 text-slate-500" /> Xem
+                  ảnh/tệp/link đã gửi
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                   onClick={() => {
                     setSheetTab("search");
                     setSheetOpen(true);
                   }}
                 >
-                  <SearchIcon className="text-slate-500" /> Tìm kiếm tin nhắn
+                  <SearchIcon className="w-4 h-4 text-slate-500" /> Tìm kiếm tin
+                  nhắn
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                   onClick={() => {
                     setSheetTab("pinned");
                     setSheetOpen(true);
                   }}
                 >
-                  <Pin className="text-slate-500" /> Xem tin ghim
+                  <Pin className="w-4 h-4 text-slate-500" /> Xem tin ghim
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-red-600 focus:bg-red-50 focus:text-red-700"
+                  className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-800 focus:bg-slate-100 focus:text-slate-900"
                   onClick={() => setClearHistoryConfirmOpen(true)}
                 >
-                  <Trash2 className="w-4 h-4 text-red-500" /> Xóa lịch sử hội thoại
+                  <Trash2 className="w-4 h-4 text-slate-500" /> Xóa lịch sử hội
+                  thoại
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                  className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                   onClick={openBackgroundPicker}
                 >
-                  <Palette className="text-slate-500" /> Đổi background
+                  <Palette className="w-4 h-4 text-slate-500" /> Đổi background
                 </DropdownMenuItem>
                 {conversation?.type === "group" && (
                   <DropdownMenuItem
-                    className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                    className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                     onClick={() => setInviteOpen(true)}
                   >
-                    <UserPlus className="text-slate-500" /> Thêm thành viên vào
-                    nhóm
+                    <UserPlus className="w-4 h-4 text-slate-500" /> Thêm thành
+                    viên vào nhóm
                   </DropdownMenuItem>
                 )}
                 {conversation?.type === "group" && (
                   <DropdownMenuItem
-                    className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                    className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                     onClick={() => setSummaryOpen(true)}
                   >
-                    <Sparkles className="text-cyan-500" /> Tóm tắt unread
+                    <Sparkles className="w-4 h-4 text-slate-500" /> Tóm tắt
+                    unread
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuSeparator />
+                <DropdownMenuSeparator className="my-1 bg-slate-200/70" />
 
                 {/* Private chat options */}
                 {conversation?.type === "private" && (
                   <>
                     <DropdownMenuItem
-                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                       onClick={handleOpenFriendProfile}
                     >
-                      <UserCircle2 className="text-slate-500" /> Xem trang cá
-                      nhân
+                      <UserCircle2 className="w-4 h-4 text-slate-500" /> Xem
+                      trang cá nhân
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                       onClick={() => {
                         if (partnerId) {
                           setSelectedIds([partnerId]);
@@ -1145,11 +1222,32 @@ export function ChatHeader({
                         setGroupOpen(true);
                       }}
                     >
-                      <UserPlus className="text-slate-500" /> Tạo nhóm với người
-                      này
+                      <UserPlus className="w-4 h-4 text-slate-500" /> Tạo nhóm
+                      với người này
                     </DropdownMenuItem>
                     <DropdownMenuItem
-                      className="h-10 rounded-lg px-3 text-[15px] font-medium text-slate-700"
+                      className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-800 focus:bg-slate-100 focus:text-slate-900"
+                      onClick={async () => {
+                        if (!partnerId) return;
+                        await restrictUserMutation.mutateAsync(partnerId);
+                      }}
+                    >
+                      <ShieldAlert className="w-4 h-4 text-slate-500" /> Thêm
+                      vào danh sách hạn chế
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-800 focus:bg-slate-100 focus:text-slate-900"
+                      onClick={() => {
+                        toast.info(
+                          "Tính năng báo cáo lừa đảo đang được phát triển",
+                        );
+                      }}
+                    >
+                      <ShieldBan className="w-4 h-4 text-slate-500" /> Báo cáo
+                      lừa đảo
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      className="h-10 rounded-xl px-3 text-[15px] font-medium text-slate-700 focus:bg-slate-100"
                       onClick={async () => {
                         if (partnerId) {
                           if (isBlockedByMe) {
@@ -1162,7 +1260,7 @@ export function ChatHeader({
                         }
                       }}
                     >
-                      <ShieldBan className={isBlockedByMe ? "text-emerald-500" : "text-red-500"} />
+                      <ShieldBan className="w-4 h-4 text-slate-500" />
                       {isBlockedByMe ? "Mở chặn người này" : "Chặn người này"}
                     </DropdownMenuItem>
                   </>
@@ -1222,16 +1320,16 @@ export function ChatHeader({
       </div>
 
       {latestPinnedItem?.message && (
-        <div className="sticky top-[70px] md:top-[80px] z-20 border-b border-amber-200/70 bg-amber-50/90 backdrop-blur px-3 md:px-6 py-2">
+        <div className="sticky top-[70px] md:top-[80px] z-20 border-b border-blue-200/70 bg-blue-50/90 backdrop-blur px-3 md:px-6 py-2">
           <div className="mx-auto flex w-full max-w-[1240px] items-center gap-2">
             <button
               type="button"
               onClick={handleFocusLatestPinnedMessage}
-              className="flex-1 min-w-0 px-3 py-2 text-left transition border rounded-xl border-amber-200 bg-white/80 hover:bg-white"
+              className="flex-1 min-w-0 px-3 py-2 text-left transition border rounded-xl border-blue-200 bg-white/80 hover:bg-white"
             >
-              <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+              <div className="flex items-center gap-2 text-[11px] font-semibold tracking-wide text-blue-700">
                 <Pin className="h-3.5 w-3.5" />
-                Tin nhan ghim
+                Tin nhắn ghim
               </div>
               <div className="mt-0.5 truncate text-sm text-slate-700">
                 {latestPinnedPreview}
@@ -1241,7 +1339,7 @@ export function ChatHeader({
               type="button"
               size="sm"
               variant="outline"
-              className="shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100"
+              className="shrink-0 border-blue-300 text-blue-700 hover:bg-blue-100"
               onClick={() => {
                 setSheetTab("pinned");
                 setSheetOpen(true);
@@ -1565,44 +1663,168 @@ export function ChatHeader({
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <div className="flex items-center gap-3 mb-1">
-              <div className="flex items-center justify-center w-10 h-10 rounded-full bg-red-100 shrink-0">
+              <div className="flex items-center justify-center w-10 h-10 bg-red-100 rounded-full shrink-0">
                 <Trash2 className="w-5 h-5 text-red-600" />
               </div>
-              <DialogTitle className="text-slate-900">Xóa lịch sử hội thoại?</DialogTitle>
+              <DialogTitle className="text-slate-900">
+                Xóa lịch sử hội thoại?
+              </DialogTitle>
             </div>
           </DialogHeader>
           <p className="text-sm text-slate-500 leading-relaxed pl-[52px]">
-            Tất cả tin nhắn sẽ <span className="font-medium text-slate-700">biến mất khỏi màn hình của bạn</span> ngay lập tức. Người khác trong cuộc trò chuyện vẫn giữ nguyên lịch sử của họ.
+            Tất cả tin nhắn sẽ{" "}
+            <span className="font-medium text-slate-700">
+              biến mất khỏi màn hình của bạn
+            </span>{" "}
+            ngay lập tức. Người khác trong cuộc trò chuyện vẫn giữ nguyên lịch
+            sử của họ.
           </p>
-          <DialogFooter className="gap-2 sm:gap-0 pt-2">
+          <DialogFooter className="gap-2 pt-2 sm:gap-0">
             <Button
               variant="outline"
               className="flex-1 sm:flex-none border-slate-200"
               onClick={() => setClearHistoryConfirmOpen(false)}
-              disabled={clearConversationHistoryMutation.isPending}
+              disabled={
+                clearConversationHistoryMutation.isPending || isSchedulingClear
+              }
             >
               Hủy bỏ
             </Button>
             <Button
               variant="destructive"
-              className="flex-1 sm:flex-none gap-2"
-              onClick={() => {
+              className="flex-1 gap-2 sm:flex-none"
+              onClick={async () => {
                 if (!currentId) return;
-                clearConversationHistoryMutation.mutate(
-                  { conversationId: currentId },
-                  {
-                    onSuccess: () => {
-                      setClearHistoryConfirmOpen(false);
+                const conversationId = String(currentId);
+
+                await queryClient.cancelQueries({
+                  queryKey: ["messages", conversationId],
+                });
+                await queryClient.cancelQueries({
+                  queryKey: ["conversations"],
+                });
+
+                const previousMessages =
+                  queryClient.getQueryData<MessagesResponse>([
+                    "messages",
+                    conversationId,
+                  ]);
+                const previousConversations =
+                  queryClient.getQueryData<ConversationsResponse>([
+                    "conversations",
+                  ]);
+
+                pendingClearSnapshotRef.current = {
+                  conversationId,
+                  previousMessages,
+                  previousConversations,
+                };
+
+                queryClient.setQueryData<MessagesResponse>(
+                  ["messages", conversationId],
+                  (old) => ({
+                    ...(old || {}),
+                    messages: [],
+                    total: 0,
+                    hasMore: false,
+                    nextCursor: null,
+                    pagination: {
+                      ...(old?.pagination || {}),
+                      hasMore: false,
+                      nextCursor: null,
                     },
+                  }),
+                );
+
+                queryClient.setQueryData<ConversationsResponse>(
+                  ["conversations"],
+                  (old) => {
+                    if (!old?.conversations?.length) return old;
+                    return {
+                      ...old,
+                      conversations: old.conversations.filter(
+                        (conversation) => {
+                          const id = String(
+                            conversation.id || conversation._id || "",
+                          );
+                          return id !== conversationId;
+                        },
+                      ),
+                    };
                   },
                 );
+
+                setClearHistoryConfirmOpen(false);
+                setIsSchedulingClear(true);
+                router.push("/messages");
+
+                const toastId = pendingClearToastIdRef.current;
+                let remainingSeconds = Math.floor(CLEAR_HISTORY_UNDO_MS / 1000);
+                const renderUndoToast = () => {
+                  toast.info(`Đoạn chat sẽ bị xóa sau ${remainingSeconds}s`, {
+                    id: toastId,
+                    action: {
+                      label: "Hoàn tác",
+                      onClick: undoPendingClearHistory,
+                    },
+                    duration: CLEAR_HISTORY_UNDO_MS,
+                  });
+                };
+
+                renderUndoToast();
+                if (pendingClearCountdownRef.current) {
+                  clearInterval(pendingClearCountdownRef.current);
+                }
+                pendingClearCountdownRef.current = setInterval(() => {
+                  remainingSeconds = Math.max(remainingSeconds - 1, 0);
+                  renderUndoToast();
+                  if (
+                    remainingSeconds <= 0 &&
+                    pendingClearCountdownRef.current
+                  ) {
+                    clearInterval(pendingClearCountdownRef.current);
+                    pendingClearCountdownRef.current = null;
+                  }
+                }, 1000);
+
+                pendingClearTimeoutRef.current = setTimeout(() => {
+                  clearConversationHistoryMutation.mutate(
+                    { conversationId },
+                    {
+                      onSuccess: () => {
+                        pendingClearSnapshotRef.current = null;
+                        pendingClearTimeoutRef.current = null;
+                        if (pendingClearCountdownRef.current) {
+                          clearInterval(pendingClearCountdownRef.current);
+                          pendingClearCountdownRef.current = null;
+                        }
+                        toast.dismiss(toastId);
+                        setIsSchedulingClear(false);
+                      },
+                      onError: () => {
+                        restoreClearedConversationSnapshot();
+                        pendingClearSnapshotRef.current = null;
+                        pendingClearTimeoutRef.current = null;
+                        if (pendingClearCountdownRef.current) {
+                          clearInterval(pendingClearCountdownRef.current);
+                          pendingClearCountdownRef.current = null;
+                        }
+                        toast.dismiss(toastId);
+                        setIsSchedulingClear(false);
+                      },
+                    },
+                  );
+                }, CLEAR_HISTORY_UNDO_MS);
               }}
-              disabled={clearConversationHistoryMutation.isPending}
+              disabled={
+                clearConversationHistoryMutation.isPending || isSchedulingClear
+              }
             >
-              {clearConversationHistoryMutation.isPending ? (
+              {clearConversationHistoryMutation.isPending ||
+              isSchedulingClear ? (
                 <>
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Đang xóa...
+                  {isSchedulingClear ? "Đang chờ hoàn tác..." : "Đang xóa..."}
                 </>
               ) : (
                 <>
@@ -1646,6 +1868,43 @@ function MessagesSideSheet({
     "images",
   );
   const { mutate: unpinMessage, isPending: isUnpinning } = useUnpinMessage();
+  const formatVietnamDateTime = useCallback((value?: string | number | Date) => {
+    const date = value ? new Date(value) : new Date();
+    if (Number.isNaN(date.getTime())) return "--";
+
+    const timeFormatter = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour12: false,
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const fullFormatter = new Intl.DateTimeFormat("vi-VN", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      hour12: false,
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    const ymdFormatter = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Ho_Chi_Minh",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    });
+
+    const now = new Date();
+    const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const currentKey = ymdFormatter.format(now);
+    const yesterdayKey = ymdFormatter.format(yesterday);
+    const targetKey = ymdFormatter.format(date);
+    const timeText = timeFormatter.format(date);
+
+    if (targetKey === currentKey) return `${timeText} hôm nay`;
+    if (targetKey === yesterdayKey) return `${timeText} hôm qua`;
+    return fullFormatter.format(date);
+  }, []);
 
   const getMessageId = useCallback((message: Message): string | undefined => {
     return message.id || message._id;
@@ -1919,9 +2178,9 @@ function MessagesSideSheet({
         )}
         <ScrollArea className="mt-4 h-[70vh]">
           {tab === "pinned" && (
-            <div className="pr-3 space-y-2">
+            <div className="space-y-3 pr-3">
               {pinnedItems.length === 0 ? (
-                <div className="text-sm text-slate-500">
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">
                   Chưa có tin nhắn ghim
                 </div>
               ) : (
@@ -1934,11 +2193,11 @@ function MessagesSideSheet({
                   return (
                     <div
                       key={`${messageId}-${item.pinnedAt || ""}`}
-                      className="p-2 border rounded-md"
+                      className="rounded-2xl border border-blue-100/80 bg-gradient-to-b from-white to-blue-50/30 p-3 shadow-sm"
                     >
                       <button
                         type="button"
-                        className="w-full text-left"
+                        className="w-full rounded-xl px-1 py-0.5 text-left transition-colors hover:bg-white/80"
                         onClick={() => {
                           if (
                             !messageId ||
@@ -1960,22 +2219,21 @@ function MessagesSideSheet({
                           onOpenChange(false);
                         }}
                       >
-                        <div className="text-sm font-medium text-slate-800 line-clamp-2">
+                        <div className="line-clamp-2 text-[15px] font-semibold text-slate-800">
                           {getPinnedPreview(item)}
                         </div>
-                        <div className="mt-1 text-xs text-slate-500">
-                          Ghim lúc{" "}
-                          {new Date(
-                            item.pinnedAt || Date.now(),
-                          ).toLocaleString()}
+                        <div className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                          <Pin className="h-3 w-3" />
+                          Ghim lúc {formatVietnamDateTime(item.pinnedAt)}
                         </div>
                       </button>
                       {canManagePinned && (
-                        <div className="flex justify-end mt-2">
+                        <div className="mt-3 flex justify-end">
                           <Button
                             type="button"
                             size="sm"
                             variant="outline"
+                            className="h-8 rounded-xl border-red-200 bg-white text-red-600 hover:bg-red-50 hover:text-red-700"
                             disabled={
                               isUnpinning || !conversationId || !messageId
                             }
@@ -2041,7 +2299,7 @@ function MessagesSideSheet({
                         {item.link}
                       </a>
                       <div className="mt-1 text-xs text-slate-500">
-                        {new Date(item.createdAt).toLocaleString()}
+                        {formatVietnamDateTime(item.createdAt)}
                       </div>
                     </div>
                   ))
@@ -2084,7 +2342,7 @@ function MessagesSideSheet({
                       {m.content}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      {new Date(m.createdAt).toLocaleString()}
+                      {formatVietnamDateTime(m.createdAt)}
                     </div>
                   </button>
                 ))
@@ -2992,14 +3250,14 @@ function GroupSettingsDrawer({
                     </div>
                   )}
 
-                  <div className="space-y-3 pt-2">
-                    <div className="text-xs font-semibold text-slate-500 tracking-wider uppercase px-1">
+                  <div className="pt-2 space-y-3">
+                    <div className="px-1 text-xs font-semibold tracking-wider uppercase text-slate-500">
                       Dữ liệu & Lưu trữ
                     </div>
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full justify-start gap-3 rounded-2xl border-red-100 bg-red-50/50 text-red-600 hover:bg-red-50 hover:text-red-700 hover:border-red-200 transition-all h-12"
+                      className="justify-start w-full h-12 gap-3 text-red-600 transition-all border-red-100 rounded-2xl bg-red-50/50 hover:bg-red-50 hover:text-red-700 hover:border-red-200"
                       onClick={onClearHistory}
                     >
                       <Trash2 className="w-4 h-4 text-red-500" />

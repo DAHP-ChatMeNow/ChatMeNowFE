@@ -3,6 +3,7 @@
 import { Fragment, useRef, useEffect, useState, useCallback, useMemo, type MouseEvent } from "react";
 import {
   FileAudio2,
+  Check,
   Copy,
   MoreVertical,
   Pause,
@@ -12,6 +13,7 @@ import {
   PhoneMissed,
   PhoneOff,
   Reply,
+  Search,
   Pin,
   Share2,
   X,
@@ -42,6 +44,7 @@ import {
   useConversation,
   useConversations,
   useDeleteMessageForMe,
+  useAcceptMessageRequest,
   useMarkConversationAsRead,
   useMessages,
   usePinnedMessages,
@@ -55,6 +58,8 @@ import {
 } from "@/hooks/use-chat";
 import {
   useGetFriendProfile,
+  useRestrictedUsers,
+  useRestrictUser,
   useSendFriendRequest,
 } from "@/hooks/use-contact";
 import { MessageSkeleton } from "@/components/skeletons/message-skeleton";
@@ -333,25 +338,34 @@ const attachmentKeyOrUrl = (attachment: MessageAttachment) => {
   return attachment.url;
 };
 
-const hasUrlInContent = (content?: string) =>
-  /(?:https?:\/\/|www\.)\S+/i.test(String(content || ""));
-
 const FORWARDED_MESSAGE_MARKER = "[chatmenow-forwarded]";
+const FORWARDED_FROM_PREFIX = "[chatmenow-forwarded-from]";
 
 const parseForwardedMessageContent = (content?: string) => {
   const rawContent = String(content || "");
   if (!rawContent.startsWith(FORWARDED_MESSAGE_MARKER)) {
     return {
       isForwarded: false,
+      forwardedFrom: "",
       displayContent: rawContent,
     };
   }
 
+  const stripped = rawContent
+    .slice(FORWARDED_MESSAGE_MARKER.length)
+    .replace(/^\n+/, "");
+  const lines = stripped.split("\n");
+  const firstLine = String(lines[0] || "").trim();
+  const hasForwardedFrom = firstLine.startsWith(FORWARDED_FROM_PREFIX);
+  const forwardedFrom = hasForwardedFrom
+    ? firstLine.slice(FORWARDED_FROM_PREFIX.length).trim()
+    : "";
+  const displayContent = hasForwardedFrom ? lines.slice(1).join("\n") : stripped;
+
   return {
     isForwarded: true,
-    displayContent: rawContent
-      .slice(FORWARDED_MESSAGE_MARKER.length)
-      .replace(/^\n+/, ""),
+    forwardedFrom,
+    displayContent,
   };
 };
 
@@ -374,11 +388,48 @@ const isMessageForwardable = (message: Message) => {
   const content = String(displayContent || "").trim();
   const attachments = getForwardableAttachments(message.attachments);
 
-  return attachments.length > 0 || hasUrlInContent(content);
+  return attachments.length > 0 || content.length > 0;
+};
+
+type ForwardConversationMember = {
+  userId?: string | { _id?: string; id?: string; displayName?: string; avatar?: string };
+  displayName?: string;
+  avatar?: string;
+};
+
+type ForwardConversationLike = {
+  id?: string;
+  _id?: string;
+  type?: string;
+  name?: string;
+  groupAvatar?: string;
+  avatar?: string;
+  partner?: { displayName?: string; avatar?: string };
+  otherUser?: { displayName?: string };
+  members?: ForwardConversationMember[];
+  lastMessage?: { content?: string; createdAt?: string | Date };
+  updatedAt?: string | Date;
+};
+
+const resolveForwardPartner = (
+  conversation: ForwardConversationLike,
+  currentUserId?: string,
+) => {
+  const members = Array.isArray(conversation?.members)
+    ? conversation.members
+    : [];
+
+  return members.find((member: ForwardConversationMember) => {
+    const memberUserId =
+      typeof member?.userId === "string"
+        ? member.userId
+        : member?.userId?._id || member?.userId?.id;
+    return Boolean(memberUserId) && memberUserId !== currentUserId;
+  });
 };
 
 const getConversationForwardLabel = (
-  conversation: any,
+  conversation: ForwardConversationLike,
   currentUserId?: string,
 ): string => {
   const name = String(conversation?.name || "").trim();
@@ -386,16 +437,7 @@ const getConversationForwardLabel = (
 
   if (conversation?.type === "group") return "Nhóm chat";
   if (conversation?.type === "private") {
-    const members = Array.isArray(conversation?.members)
-      ? conversation.members
-      : [];
-    const partner = members.find((member: any) => {
-      const memberUserId =
-        typeof member?.userId === "string"
-          ? member.userId
-          : member?.userId?._id || member?.userId?.id;
-      return memberUserId && memberUserId !== currentUserId;
-    });
+    const partner = resolveForwardPartner(conversation, currentUserId);
 
     const partnerName = String(
       partner?.userId?.displayName ||
@@ -409,6 +451,47 @@ const getConversationForwardLabel = (
   }
 
   return "Cuộc trò chuyện";
+};
+
+const getConversationForwardAvatar = (
+  conversation: ForwardConversationLike,
+  currentUserId?: string,
+): string | undefined => {
+  const groupAvatar = String(conversation?.groupAvatar || "").trim();
+  if (groupAvatar) return groupAvatar;
+
+  const partnerAvatar = String(conversation?.partner?.avatar || "").trim();
+  if (partnerAvatar) return partnerAvatar;
+
+  const partner = resolveForwardPartner(conversation, currentUserId);
+
+  return String(
+    partner?.userId?.avatar || partner?.avatar || conversation?.avatar || "",
+  ).trim();
+};
+
+const getForwardConversationSubtitle = (
+  conversation: ForwardConversationLike,
+): string => {
+  const content = String(conversation?.lastMessage?.content || "").trim();
+  if (!content) {
+    return conversation?.type === "group"
+      ? "Nhóm trò chuyện"
+      : "Trò chuyện riêng";
+  }
+
+  return content;
+};
+
+const formatForwardConversationTime = (value: unknown): string => {
+  if (!value) return "";
+  const date = new Date(value as string | number | Date);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return date.toLocaleTimeString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 };
 
 const getReplyToMessageId = (value: unknown): string | undefined => {
@@ -1616,6 +1699,7 @@ export default function ChatDetailClient() {
   const router = useRouter();
   const conversationId = id as string;
   const user = useAuthStore((state) => state.user);
+  const { data: restrictedUsersData } = useRestrictedUsers();
 
   // Fallback cho userId
   const currentUserId = user?.id || user?._id;
@@ -1641,11 +1725,29 @@ export default function ChatDetailClient() {
   const isConversationBlocked = Boolean(
     !aiMode && (conversation as any)?.isBlocked,
   );
+  const isPendingMessageRequest = Boolean(
+    !aiMode && conversation?.isMessageRequestPending,
+  );
+  const isPendingMessageRequestRecipient =
+    isPendingMessageRequest && !conversation?.isMessageRequestSentByViewer;
+  const isPendingMessageRequestSender =
+    isPendingMessageRequest && Boolean(conversation?.isMessageRequestSentByViewer);
+  const remainingMessageQuota = Number(
+    conversation?.remainingMessageQuota ?? 0,
+  );
+  const canSendInCurrentConversation = aiMode
+    ? true
+    : conversation?.canCurrentUserSend !== false;
   const blockedMessage = (conversation as any)?.blockedByMe
     ? "Bạn đã chặn người này. Mở chặn để tiếp tục trò chuyện."
     : (conversation as any)?.blockedByOther
       ? "Bạn không thể chat vì người này đã chặn bạn."
       : "Cuộc trò chuyện đang bị chặn.";
+  const pendingMessageRequestBanner = isPendingMessageRequestRecipient
+    ? "Đoạn chat này đang ở danh sách chờ. Bạn có thể chấp nhận để chuyển vào hộp thư chính hoặc thêm người này vào danh sách hạn chế."
+    : isPendingMessageRequestSender
+      ? `Cuộc trò chuyện này đang chờ đối phương chấp nhận. Bạn còn có thể gửi ${remainingMessageQuota} trong 3 tin nhắn tối đa.`
+      : "";
   const messages =
     messagesData?.messages?.length || !aiMode
       ? messagesData?.messages || []
@@ -1676,6 +1778,9 @@ export default function ChatDetailClient() {
 
   const { mutate: markConversationAsRead, isPending: isMarkingConversationAsRead } =
     useMarkConversationAsRead();
+  const { mutate: acceptMessageRequest, isPending: isAcceptingMessageRequest } =
+    useAcceptMessageRequest();
+  const { mutate: restrictUser, isPending: isRestrictingUser } = useRestrictUser();
 
   useEffect(() => {
     if (!shouldShowJoinGroupPanel || !conversationId) return;
@@ -1903,6 +2008,18 @@ export default function ChatDetailClient() {
     () => new Set(otherConversationMemberIds),
     [otherConversationMemberIds],
   );
+  const pendingRequestPartnerId = otherConversationMemberIds[0] || "";
+  const isPendingRequestPartnerRestricted = useMemo(() => {
+    if (!pendingRequestPartnerId) return false;
+    const restrictedUsers = restrictedUsersData?.restrictedUsers || [];
+
+    return restrictedUsers.some((restrictedUser) => {
+      const restrictedId = String(
+        restrictedUser?.id || restrictedUser?._id || "",
+      );
+      return restrictedId === pendingRequestPartnerId;
+    });
+  }, [pendingRequestPartnerId, restrictedUsersData?.restrictedUsers]);
 
   const lastAutoMarkedReadTokenRef = useRef("");
 
@@ -2182,6 +2299,8 @@ export default function ChatDetailClient() {
   const [selectedForwardMessageId, setSelectedForwardMessageId] = useState<
     string | null
   >(null);
+  const [selectedForwardMessageIds, setSelectedForwardMessageIds] = useState<string[]>([]);
+  const [forwardSelectionMode, setForwardSelectionMode] = useState(false);
   const [selectedForwardConversationId, setSelectedForwardConversationId] =
     useState<string>("");
   const [isForwarding, setIsForwarding] = useState(false);
@@ -2309,6 +2428,14 @@ export default function ChatDetailClient() {
     if (!selectedForwardMessageId) return undefined;
     return messageMapById.get(selectedForwardMessageId);
   }, [messageMapById, selectedForwardMessageId]);
+  const selectedForwardMessages = useMemo(
+    () =>
+      selectedForwardMessageIds
+        .map((id) => messageMapById.get(id))
+        .filter((message): message is Message => Boolean(message))
+        .filter((message) => isMessageForwardable(message)),
+    [messageMapById, selectedForwardMessageIds],
+  );
 
   const forwardTargetConversations = useMemo(() => {
     const list = (conversationsData?.conversations || []).filter(
@@ -2833,6 +2960,8 @@ export default function ChatDetailClient() {
   useEffect(() => {
     setActiveMessageActionsId(null);
     setReplyingToMessageId(null);
+    setForwardSelectionMode(false);
+    setSelectedForwardMessageIds([]);
   }, [conversationId]);
 
   useEffect(() => {
@@ -2840,6 +2969,7 @@ export default function ChatDetailClient() {
     setForwardSearchQuery("");
     setSelectedForwardConversationId("");
     setSelectedForwardMessageId(null);
+    setSelectedForwardMessageIds([]);
     setIsForwarding(false);
   }, [forwardDialogOpen]);
 
@@ -2918,57 +3048,99 @@ export default function ChatDetailClient() {
     setReplyingToMessageId(null);
   };
 
-  const openForwardDialog = useCallback((messageId?: string) => {
-    if (!messageId) return;
-    setSelectedForwardMessageId(messageId);
+  const openForwardDialog = useCallback((messageId?: string, messageIds?: string[]) => {
+    const ids = (messageIds || []).filter(Boolean);
+    const primaryId = messageId || ids[0];
+    if (!primaryId) return;
+    setSelectedForwardMessageId(primaryId);
+    setSelectedForwardMessageIds(ids.length > 0 ? ids : [primaryId]);
     setSelectedForwardConversationId("");
     setForwardSearchQuery("");
     setForwardDialogOpen(true);
     setActiveMessageActionsId(null);
   }, []);
 
-  const handleForwardMessage = useCallback(async () => {
-    if (!selectedForwardMessage || !selectedForwardConversationId) return;
-
-    if (!isMessageForwardable(selectedForwardMessage)) {
-      toast.error("Chỉ hỗ trợ chuyển tiếp link, tệp hoặc hình ảnh");
-      return;
-    }
-
-    const attachments = getForwardableAttachments(selectedForwardMessage.attachments);
-    const { displayContent } = parseForwardedMessageContent(
-      selectedForwardMessage.content,
+  const openForwardSelectionMode = useCallback((messageId?: string) => {
+    setForwardSelectionMode(true);
+    setActiveMessageActionsId(null);
+    if (!messageId) return;
+    setSelectedForwardMessageIds((prev) =>
+      prev.includes(messageId) ? prev : [...prev, messageId],
     );
-    const content = String(displayContent || "").trim();
-    const canForwardLinkOnly = hasUrlInContent(content);
+  }, []);
 
-    if (attachments.length === 0 && !canForwardLinkOnly) {
-      toast.error("Chỉ hỗ trợ chuyển tiếp link, tệp hoặc hình ảnh");
+  const toggleForwardMessageSelection = useCallback((messageId?: string) => {
+    if (!messageId) return;
+    setSelectedForwardMessageIds((prev) =>
+      prev.includes(messageId)
+        ? prev.filter((id) => id !== messageId)
+        : [...prev, messageId],
+    );
+  }, []);
+
+  const cancelForwardSelectionMode = useCallback(() => {
+    setForwardSelectionMode(false);
+    setSelectedForwardMessageIds([]);
+  }, []);
+
+  const handleForwardMessage = useCallback(async () => {
+    if (!selectedForwardConversationId) return;
+
+    const messagesToForward =
+      selectedForwardMessages.length > 0
+        ? selectedForwardMessages
+        : selectedForwardMessage
+          ? [selectedForwardMessage]
+          : [];
+
+    if (messagesToForward.length === 0) {
+      toast.error("Không có tin nhắn hợp lệ để chuyển tiếp");
       return;
     }
-
-    const inferredType =
-      selectedForwardMessage.type && selectedForwardMessage.type !== "text"
-        ? selectedForwardMessage.type
-        : attachments.length > 0
-          ? resolveMessageTypeFromAttachment(attachments[0])
-          : "text";
 
     setIsForwarding(true);
     try {
-      const forwardedContent = content
-        ? `${FORWARDED_MESSAGE_MARKER}\n${content}`
-        : FORWARDED_MESSAGE_MARKER;
+      for (const message of messagesToForward) {
+        if (!isMessageForwardable(message)) continue;
+        const attachments = getForwardableAttachments(message.attachments);
+        const { displayContent } = parseForwardedMessageContent(message.content);
+        const content = String(displayContent || "").trim();
+        const originalSenderId = getMessageSenderId(message);
+        const originalSenderName = String(
+          (typeof message.senderId === "object" && message.senderId?.displayName) ||
+            (originalSenderId ? memberDisplayMap.get(originalSenderId)?.displayName : "") ||
+            (originalSenderId && originalSenderId === currentUserId
+              ? user?.displayName
+              : "") ||
+            "Người dùng",
+        ).trim();
+        const inferredType =
+          message.type && message.type !== "text"
+            ? message.type
+            : attachments.length > 0
+              ? resolveMessageTypeFromAttachment(attachments[0])
+              : "text";
+        const forwardedHeader = `${FORWARDED_MESSAGE_MARKER}\n${FORWARDED_FROM_PREFIX} ${originalSenderName}`;
+        const forwardedContent = content
+          ? `${forwardedHeader}\n${content}`
+          : forwardedHeader;
 
-      await sendMessage({
-        conversationId: selectedForwardConversationId,
-        content: forwardedContent,
-        type: inferredType,
-        attachments,
-      });
+        await sendMessage({
+          conversationId: selectedForwardConversationId,
+          content: forwardedContent,
+          type: inferredType,
+          attachments,
+        });
+      }
 
       setForwardDialogOpen(false);
-      toast.success("Đã chuyển tiếp tin nhắn");
+      setForwardSelectionMode(false);
+      setSelectedForwardMessageIds([]);
+      toast.success(
+        messagesToForward.length > 1
+          ? `Đã chuyển tiếp ${messagesToForward.length} tin nhắn`
+          : "Đã chuyển tiếp tin nhắn",
+      );
     } catch (error: any) {
       toast.error(
         error?.response?.data?.message || "Không thể chuyển tiếp tin nhắn",
@@ -2976,7 +3148,7 @@ export default function ChatDetailClient() {
     } finally {
       setIsForwarding(false);
     }
-  }, [selectedForwardConversationId, selectedForwardMessage, sendMessage]);
+  }, [currentUserId, memberDisplayMap, selectedForwardConversationId, selectedForwardMessage, selectedForwardMessages, sendMessage, user?.displayName]);
 
 
   const handleSendAttachmentsInternal = useCallback(
@@ -3180,7 +3352,7 @@ export default function ChatDetailClient() {
   };
 
   return (
-    <div className="relative flex flex-col w-full h-full min-h-0 overflow-hidden bg-white">
+    <div className="relative flex h-full min-h-0 w-full flex-col overflow-hidden bg-gradient-to-b from-slate-50 via-white to-blue-50/30">
       <ChatHeader
         name={conversationName}
         isOnline={isOnlineStatus}
@@ -3189,6 +3361,53 @@ export default function ChatDetailClient() {
         summaryOpen={summaryOpen}
         onSummaryOpenChange={setSummaryOpen}
       />
+      {isPendingMessageRequest && !isPendingRequestPartnerRestricted && (
+        <div className={`px-3 pt-3 md:px-6 md:pt-4 xl:px-10 ${
+          CHAT_BACKGROUND_CLASS[backgroundKey]
+        }`}>
+          <div className="w-full max-w-[1240px] mx-auto">
+            <div
+                className={`rounded-2xl border px-4 py-3 text-sm shadow-sm ${
+                isPendingMessageRequestRecipient
+                  ? "border-blue-200 bg-blue-50 text-blue-900"
+                  : "border-blue-200 bg-blue-50 text-blue-900"
+              }`}
+            >
+              <div className="space-y-3">
+                <div>{pendingMessageRequestBanner}</div>
+                {isPendingMessageRequestRecipient ? (
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-xl bg-blue-600 px-4 hover:bg-blue-700"
+                      disabled={isAcceptingMessageRequest}
+                      onClick={() => acceptMessageRequest(conversationId)}
+                    >
+                      {isAcceptingMessageRequest ? "Đang chấp nhận..." : "Chấp nhận"}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="rounded-xl border-blue-300 bg-white/80 px-4 text-blue-700 hover:bg-blue-100"
+                      disabled={!pendingRequestPartnerId || isRestrictingUser}
+                      onClick={() => {
+                        if (!pendingRequestPartnerId) return;
+                        restrictUser(pendingRequestPartnerId);
+                      }}
+                    >
+                      {isRestrictingUser
+                        ? "Đang cập nhật..."
+                        : "Thêm vào danh sách hạn chế"}
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <ScrollArea
         className={`flex-1 min-h-0 ${CHAT_BACKGROUND_CLASS[backgroundKey]}`}
@@ -3196,28 +3415,37 @@ export default function ChatDetailClient() {
       >
         <div className="w-full max-w-[1240px] px-3 py-4 md:px-6 md:py-6 xl:px-10 mx-auto">
           <div className="flex flex-col w-full gap-3.5 pb-4">
-            {latestPinnedMessage && (
-              <button
-                type="button"
-                onClick={() => {
-                  const pinnedId = String(
-                    latestPinnedMessage.id || latestPinnedMessage._id || "",
-                  );
-                  if (!pinnedId) return;
-                  focusMessageById(pinnedId);
-                }}
-                className="flex items-start gap-2 rounded-2xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-left shadow-sm transition hover:bg-amber-100/80"
-              >
-                <Pin className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-                <div className="min-w-0">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-                    Tin ghim mới nhất
-                  </div>
-                  <div className="truncate text-sm text-slate-700">
-                    {buildReplyPreview(latestPinnedMessage)}
-                  </div>
+            {forwardSelectionMode && (
+              <div className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-2xl border border-blue-200/80 bg-white/95 px-3 py-2.5 text-xs text-slate-700 shadow-sm backdrop-blur">
+                <span className="font-medium">
+                  Chuyển tiếp: đã chọn {selectedForwardMessageIds.length} tin nhắn
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 rounded-full border-slate-200 bg-white px-3 text-xs text-slate-600"
+                    onClick={cancelForwardSelectionMode}
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="h-7 rounded-full px-3 text-xs"
+                    disabled={selectedForwardMessageIds.length === 0}
+                    onClick={() =>
+                      openForwardDialog(
+                        selectedForwardMessageIds[0],
+                        selectedForwardMessageIds,
+                      )
+                    }
+                  >
+                    Chuyển tiếp
+                  </Button>
                 </div>
-              </button>
+              </div>
             )}
             {isLoading ? (
               <MessageSkeleton />
@@ -3383,7 +3611,7 @@ export default function ChatDetailClient() {
                                 : `bg-white text-slate-800 rounded-bl-none ${callStyle.bubbleClass}`
                             } ${
                               messageId && highlightedMessageId === messageId
-                                ? "ring-2 ring-amber-300 ring-offset-2"
+                                ? "ring-2 ring-blue-300 ring-offset-2"
                                 : ""
                             }`}
                           >
@@ -3464,6 +3692,7 @@ export default function ChatDetailClient() {
                   const isUnsent = Boolean(msg.isUnsent || msg.unsentAt);
                   const {
                     isForwarded,
+                    forwardedFrom,
                     displayContent: parsedContent,
                   } = parseForwardedMessageContent(msg.content);
                   const attachments = msg.attachments || [];
@@ -3514,8 +3743,13 @@ export default function ChatDetailClient() {
                   const canUnsend = isMe && !isUnsent && !isAiMessage;
                   const canDeleteForMe = isMe;
                   const canForward = isMessageForwardable(msg);
+                  const isForwardSelected = Boolean(
+                    messageId && selectedForwardMessageIds.includes(messageId),
+                  );
+                  const canSelectForForward = Boolean(messageId) && canForward;
                   const canShowActions =
                     Boolean(messageId) &&
+                    !forwardSelectionMode &&
                     (canPin ||
                       canUnpin ||
                       canUnsend ||
@@ -3554,6 +3788,9 @@ export default function ChatDetailClient() {
                   const outgoingActionClass = isPlainAttachmentBubble
                     ? "text-slate-500 hover:bg-slate-200/80 hover:text-slate-700"
                     : "text-blue-100 hover:bg-blue-500/40 hover:text-white";
+                  const incomingHoverOnlyActionClass = isActionsVisible
+                    ? "opacity-100 pointer-events-auto"
+                    : "opacity-100 pointer-events-auto md:opacity-0 md:pointer-events-none md:group-hover:opacity-100 md:group-hover:pointer-events-auto md:group-focus-within:opacity-100 md:group-focus-within:pointer-events-auto";
                   const normalizedReadStatus = String(
                     msg.readStatus || "",
                   ).toLowerCase();
@@ -3735,6 +3972,27 @@ export default function ChatDetailClient() {
                         }}
                         className={`flex items-end gap-2 ${isMe ? "justify-end" : "justify-start"}`}
                       >
+                        {forwardSelectionMode && (
+                          <button
+                            type="button"
+                            aria-label={isForwardSelected ? "Bỏ chọn tin nhắn" : "Chọn tin nhắn"}
+                            onClick={() =>
+                              canSelectForForward
+                                ? toggleForwardMessageSelection(messageId)
+                                : undefined
+                            }
+                            disabled={!canSelectForForward}
+                            className={`h-5 w-5 shrink-0 rounded border text-[11px] font-semibold ${
+                              isForwardSelected
+                                ? "border-blue-600 bg-blue-600 text-white"
+                                : canSelectForForward
+                                  ? "border-slate-300 bg-white text-transparent"
+                                  : "cursor-not-allowed border-slate-200 bg-slate-100 text-transparent opacity-50"
+                            }`}
+                          >
+                            ✓
+                          </button>
+                        )}
                         {!isMe && (
                           <PresignedAvatar
                             avatarKey={senderAvatarKey}
@@ -3751,15 +4009,15 @@ export default function ChatDetailClient() {
                           onTouchEnd={clearLongPressTimer}
                           onTouchCancel={clearLongPressTimer}
                           onTouchMove={clearLongPressTimer}
-                          className={`group rounded-2xl text-[13px] md:text-[14px] max-w-[84%] md:max-w-[70%] xl:max-w-[64%] ${
+                          className={`group rounded-2xl text-[13px] shadow-sm md:text-[14px] max-w-[84%] md:max-w-[70%] xl:max-w-[64%] ${
                             isPlainAttachmentBubble
                               ? "w-fit p-0 bg-transparent text-slate-800 shadow-none"
                               : isUnsent
                                 ? unsentBubbleClass
                               : `${hasSharedPost ? "p-1.5" : "px-4 py-2.5"} shadow-sm ${
                                   isMe
-                                    ? "bg-blue-600 text-white rounded-br-none"
-                                    : "bg-white text-slate-800 border border-slate-100 rounded-bl-none"
+                                    ? "rounded-br-none bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-blue-200/40"
+                                    : "rounded-bl-none border border-slate-200/80 bg-white/92 text-slate-800 backdrop-blur"
                                 }`
                           } ${
                             messageId && highlightedMessageId === messageId
@@ -3789,14 +4047,25 @@ export default function ChatDetailClient() {
                           )}
 
                           {!isUnsent && isForwarded && (
-                            <div
-                              className={`mb-2 inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
-                                isMe
-                                  ? "bg-blue-500/45 text-blue-50"
-                                  : "bg-slate-200 text-slate-600"
-                              }`}
-                            >
-                              Chuyển tiếp
+                            <div className="mb-2">
+                              <div
+                                className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${
+                                  isMe
+                                    ? "bg-blue-500/45 text-blue-50"
+                                    : "bg-slate-200 text-slate-600"
+                                }`}
+                              >
+                                Chuyển tiếp
+                              </div>
+                              {forwardedFrom && (
+                                <p
+                                  className={`mt-1 text-[11px] ${
+                                    isMe ? "text-blue-100" : "text-slate-500"
+                                  }`}
+                                >
+                                  Từ: {forwardedFrom}
+                                </p>
+                              )}
                             </div>
                           )}
 
@@ -3921,7 +4190,7 @@ export default function ChatDetailClient() {
                               className={`mt-1.5 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium ${
                                 isMe
                                   ? "bg-blue-500/40 text-blue-50"
-                                  : "bg-amber-100 text-amber-700"
+                                  : "bg-blue-100 text-blue-700"
                               }`}
                             >
                               <Pin className="h-3 w-3" />
@@ -3930,22 +4199,26 @@ export default function ChatDetailClient() {
                           )}
                           {!isMe && (
                             <div className="mt-1 flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1">
+                              <div className="flex items-center gap-1.5">
                                 {canReply && (
                                   <button
                                     type="button"
                                     onClick={handleReplyMessage}
-                                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                                    className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-200 hover:text-slate-700 ${incomingHoverOnlyActionClass}`}
                                   >
-                                    <Reply className="h-3 w-3" />
+                                    <Reply className="h-3.5 w-3.5" />
                                     Trả lời
                                   </button>
                                 )}
                                 {canForward && (
                                   <button
                                     type="button"
-                                    onClick={() => openForwardDialog(messageId)}
-                                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                                    onClick={() =>
+                                      forwardSelectionMode
+                                        ? toggleForwardMessageSelection(messageId)
+                                        : openForwardSelectionMode(messageId)
+                                    }
+                                    className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-slate-500 transition hover:bg-slate-200 hover:text-slate-700 ${incomingHoverOnlyActionClass}`}
                                   >
                                     Chuyển tiếp
                                   </button>
@@ -3954,7 +4227,7 @@ export default function ChatDetailClient() {
                                   <button
                                     type="button"
                                     onClick={isPinned ? handleUnpinMessage : handlePinMessage}
-                                    className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] text-slate-500 transition hover:bg-slate-200 hover:text-slate-700"
+                                    className={`inline-flex h-6 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium text-slate-500 transition hover:bg-slate-200 hover:text-slate-700 ${incomingHoverOnlyActionClass}`}
                                     disabled={isPinPending || isUnpinPending}
                                   >
                                     {isPinned ? "Bỏ ghim" : "Ghim"}
@@ -3974,17 +4247,17 @@ export default function ChatDetailClient() {
                                           reactionPickerMessageId === messageId ? null : messageId,
                                         )
                                       }
-                                      className={`inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] transition ${
+                                      className={`inline-flex h-6 items-center gap-1 rounded-full px-2.5 text-[11px] font-medium transition ${incomingHoverOnlyActionClass} ${
                                         reactionPickerMessageId === messageId
                                           ? "bg-yellow-100 text-yellow-600"
                                           : "text-slate-500 hover:bg-slate-200 hover:text-slate-700"
                                       }`}
                                     >
-                                      😊
+                                      <span className="text-[14px] leading-none">😊</span>
                                     </button>
                                     {reactionPickerMessageId === messageId && (
                                       <div
-                                        className="absolute bottom-7 left-0 z-30 flex items-end gap-1 px-2 py-1.5 bg-white rounded-2xl shadow-xl border border-slate-100"
+                                        className="absolute bottom-7 left-0 z-30 flex items-start gap-1 rounded-2xl border border-slate-100 bg-white px-2 py-1.5 shadow-xl"
                                         onMouseLeave={() => setReactionPickerMessageId(null)}
                                       >
                                         {([
@@ -4011,14 +4284,16 @@ export default function ChatDetailClient() {
                                                 });
                                                 setReactionPickerMessageId(null);
                                               }}
-                                              className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded-xl transition-all duration-100 hover:scale-125 ${
+                                              className={`flex h-[56px] w-11 shrink-0 flex-col items-center justify-start gap-0.5 rounded-xl px-1 py-1 transition-all duration-100 hover:scale-110 ${
                                                 myReaction?.emoji === opt.key
                                                   ? "bg-blue-50 ring-2 ring-blue-300 scale-110"
                                                   : "hover:bg-slate-50"
                                               }`}
                                             >
                                               <span className="text-xl leading-none">{opt.emoji}</span>
-                                              <span className="text-[9px] text-slate-500 font-medium">{opt.label}</span>
+                                              <span className="text-center text-[9px] font-medium leading-[1.05] text-slate-500">
+                                                {opt.label}
+                                              </span>
                                             </button>
                                           );
                                         })}
@@ -4104,7 +4379,7 @@ export default function ChatDetailClient() {
                                   </button>
                                   {reactionPickerMessageId === messageId && (
                                     <div
-                                      className="absolute bottom-8 right-0 z-30 flex items-end gap-1 px-2 py-1.5 bg-white rounded-2xl shadow-xl border border-slate-100"
+                                      className="absolute bottom-8 right-0 z-30 flex items-start gap-1 rounded-2xl border border-slate-100 bg-white px-2 py-1.5 shadow-xl"
                                       onMouseLeave={() => setReactionPickerMessageId(null)}
                                     >
                                       {([
@@ -4131,14 +4406,16 @@ export default function ChatDetailClient() {
                                               });
                                               setReactionPickerMessageId(null);
                                             }}
-                                            className={`flex flex-col items-center gap-0.5 px-1 py-1 rounded-xl transition-all duration-100 hover:scale-125 ${
+                                            className={`flex h-[56px] w-11 shrink-0 flex-col items-center justify-start gap-0.5 rounded-xl px-1 py-1 transition-all duration-100 hover:scale-110 ${
                                               myReaction?.emoji === opt.key
                                                 ? "bg-blue-50 ring-2 ring-blue-300 scale-110"
                                                 : "hover:bg-slate-50"
                                             }`}
                                           >
                                             <span className="text-xl leading-none">{opt.emoji}</span>
-                                            <span className="text-[9px] text-slate-500 font-medium">{opt.label}</span>
+                                            <span className="text-center text-[9px] font-medium leading-[1.05] text-slate-500">
+                                              {opt.label}
+                                            </span>
                                           </button>
                                         );
                                       })}
@@ -4200,7 +4477,7 @@ export default function ChatDetailClient() {
                                     )}
                                     {canForward && (
                                       <DropdownMenuItem
-                                        onClick={() => openForwardDialog(messageId)}
+                                        onClick={() => openForwardSelectionMode(messageId)}
                                       >
                                         Chuyển tiếp
                                       </DropdownMenuItem>
@@ -4369,69 +4646,137 @@ export default function ChatDetailClient() {
       </Dialog>
 
       <Dialog open={forwardDialogOpen} onOpenChange={setForwardDialogOpen}>
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-xl border-0 bg-gradient-to-b from-white to-slate-50 p-0 overflow-hidden">
           <DialogHeader>
-            <DialogTitle>Chuyển tiếp tin nhắn</DialogTitle>
+            <div className="border-b border-slate-100 px-5 py-4">
+              <DialogTitle className="text-xl font-bold tracking-tight text-slate-900">
+                {selectedForwardMessages.length > 1
+                  ? `Chuyển tiếp ${selectedForwardMessages.length} tin nhắn`
+                  : "Chuyển tiếp tin nhắn"}
+              </DialogTitle>
+              <p className="mt-1 text-xs text-slate-500">
+                Chọn cuộc trò chuyện để gửi tiếp nội dung đã chọn.
+              </p>
+            </div>
           </DialogHeader>
 
-          <div className="space-y-3">
-            <Input
-              value={forwardSearchQuery}
-              onChange={(event) => setForwardSearchQuery(event.target.value)}
-              placeholder="Tìm cuộc trò chuyện"
-            />
+          <div className="space-y-3 px-5 pb-4">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={forwardSearchQuery}
+                onChange={(event) => setForwardSearchQuery(event.target.value)}
+                placeholder="Tìm cuộc trò chuyện"
+                className="h-11 rounded-xl border-slate-200 bg-white pl-9 pr-3 shadow-sm focus-visible:border-blue-300 focus-visible:ring-blue-100"
+              />
+            </div>
 
-            <div className="max-h-72 overflow-y-auto rounded-xl border border-slate-200">
+            <div className="max-h-72 overflow-y-auto rounded-2xl border border-slate-200 bg-white p-1.5 shadow-inner shadow-slate-100/70">
               {forwardTargetConversations.length > 0 ? (
-                forwardTargetConversations.map((item: any) => {
-                  const id = String(item?.id || item?._id || "");
+                forwardTargetConversations.map((item: unknown) => {
+                  const conversationItem = item as ForwardConversationLike;
+                  const id = String(
+                    conversationItem?.id || conversationItem?._id || "",
+                  );
                   if (!id) return null;
 
                   const isSelected = selectedForwardConversationId === id;
+                  const name = getConversationForwardLabel(
+                    conversationItem,
+                    currentUserId,
+                  );
+                  const avatar = getConversationForwardAvatar(
+                    conversationItem,
+                    currentUserId,
+                  );
+                  const subtitle =
+                    getForwardConversationSubtitle(conversationItem);
+                  const timeText = formatForwardConversationTime(
+                    conversationItem?.lastMessage?.createdAt ||
+                      conversationItem?.updatedAt,
+                  );
 
                   return (
                     <button
                       key={id}
                       type="button"
                       onClick={() => setSelectedForwardConversationId(id)}
-                      className={`flex w-full items-center justify-between px-3 py-2.5 text-left text-sm transition ${
+                      className={`group flex w-full items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${
                         isSelected
-                          ? "bg-blue-50 text-blue-700"
-                          : "hover:bg-slate-50"
+                          ? "border-blue-300 bg-blue-50/80 shadow-sm"
+                          : "border-transparent hover:border-slate-200 hover:bg-slate-50"
                       }`}
                     >
-                      <span className="truncate">{getConversationForwardLabel(item, currentUserId)}</span>
-                      {isSelected && (
-                        <span className="text-xs font-medium">Đã chọn</span>
-                      )}
+                      <PresignedAvatar
+                        avatarKey={avatar}
+                        displayName={name}
+                        className="h-10 w-10 shrink-0"
+                        fallbackClassName="bg-slate-200 text-slate-700 text-xs font-semibold"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p
+                            className={`truncate text-sm font-semibold ${
+                              isSelected ? "text-blue-700" : "text-slate-900"
+                            }`}
+                          >
+                            {name}
+                          </p>
+                          {timeText && (
+                            <span className="shrink-0 text-[11px] text-slate-400">
+                              {timeText}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          {subtitle}
+                        </p>
+                      </div>
+
+                      <div
+                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border transition ${
+                          isSelected
+                            ? "border-blue-600 bg-blue-600 text-white"
+                            : "border-slate-300 bg-white text-transparent group-hover:border-slate-400"
+                        }`}
+                      >
+                        <Check className="h-3 w-3" />
+                      </div>
                     </button>
                   );
                 })
               ) : (
-                <div className="px-3 py-5 text-center text-xs text-slate-500">
+                <div className="px-3 py-8 text-center text-xs text-slate-500">
                   Không có cuộc trò chuyện phù hợp
                 </div>
               )}
             </div>
 
-            <div className="rounded-xl bg-slate-50 px-3 py-2 text-xs text-slate-600">
-              Chỉ hỗ trợ chuyển tiếp link, tệp, hình ảnh hoặc ghi âm.
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              Hỗ trợ chuyển tiếp văn bản, link, tệp, hình ảnh hoặc ghi âm.
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="border-t border-slate-100 bg-white px-5 py-4">
             <Button
               variant="outline"
               onClick={() => setForwardDialogOpen(false)}
               disabled={isForwarding}
+              className="rounded-xl"
             >
               Hủy
             </Button>
             <Button
               onClick={() => void handleForwardMessage()}
               disabled={!selectedForwardConversationId || isForwarding}
+              className="rounded-xl"
             >
-              {isForwarding ? "Đang chuyển tiếp..." : "Chuyển tiếp"}
+              {isForwarding
+                ? "Đang chuyển tiếp..."
+                : selectedForwardMessages.length > 1
+                  ? `Chuyển tiếp ${selectedForwardMessages.length} tin`
+                  : "Chuyển tiếp"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -4532,12 +4877,6 @@ export default function ChatDetailClient() {
             )}
           </div>
 
-          {imagePreviews.length > 0 && (
-            <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-              💡 Tất cả {imagePreviews.length} ảnh sẽ được gửi trong <strong>1 tin nhắn duy nhất</strong>. Khi thu hồi sẽ thu hồi toàn bộ.
-            </div>
-          )}
-
           <DialogFooter>
             <Button
               variant="outline"
@@ -4582,7 +4921,8 @@ export default function ChatDetailClient() {
           isSendingMessage ||
           isSendingAiMessage ||
           isSendingAttachment ||
-          isConversationBlocked
+          isConversationBlocked ||
+          !canSendInCurrentConversation
         }
         onTyping={handleTyping}
         onStopTyping={handleStopTyping}
