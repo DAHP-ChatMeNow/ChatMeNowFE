@@ -157,7 +157,7 @@ export default function FriendProfilePage() {
   );
 
   const handleOpenChat = () => {
-    if (!friend?.id || !friend.isFriend) return;
+    if (!friend?.id) return;
 
     getPrivateConversation(friend.id, {
       onSuccess: (conversation) => {
@@ -276,21 +276,21 @@ export default function FriendProfilePage() {
                     />
 
                     <div className="flex items-center gap-2">
+                      <Button
+                        onClick={handleOpenChat}
+                        disabled={isOpeningChat}
+                        className="rounded-xl"
+                      >
+                        {isOpeningChat ? (
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        ) : (
+                          <MessageCircle className="w-4 h-4 mr-2" />
+                        )}
+                        Nhắn tin
+                      </Button>
+
                       {friend.isFriend ? (
                         <>
-                          <Button
-                            onClick={handleOpenChat}
-                            disabled={isOpeningChat}
-                            className="rounded-xl"
-                          >
-                            {isOpeningChat ? (
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            ) : (
-                              <MessageCircle className="w-4 h-4 mr-2" />
-                            )}
-                            Nhắn tin
-                          </Button>
-
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button

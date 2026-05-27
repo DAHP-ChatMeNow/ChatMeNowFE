@@ -237,6 +237,19 @@ export const useBlockedUsers = () => {
   });
 };
 
+export const useRestrictedUsers = () => {
+  const user = useAuthStore((state) => state.user);
+  const userId = user?._id || user?.id;
+
+  return useQuery({
+    queryKey: ["restricted-users", userId],
+    queryFn: () => userService.getRestrictedUsers(),
+    enabled: !!userId,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+  });
+};
+
 export const useBlockUser = () => {
   const queryClient = useQueryClient();
 
@@ -272,6 +285,49 @@ export const useUnblockUser = () => {
     onError: (error: any) => {
       toast.error(
         error?.response?.data?.message || "Không thể mở chặn người dùng",
+      );
+    },
+  });
+};
+
+export const useRestrictUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: userService.restrictUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["restricted-users"] });
+      queryClient.invalidateQueries({ queryKey: ["blocked-users"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["friend-profile"] });
+      toast.success("Đã thêm vào danh sách hạn chế");
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || "Không thể thêm vào danh sách hạn chế",
+      );
+    },
+  });
+};
+
+export const useUnrestrictUser = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: userService.unrestrictUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["restricted-users"] });
+      queryClient.invalidateQueries({ queryKey: ["contacts"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["conversation"] });
+      queryClient.invalidateQueries({ queryKey: ["friend-profile"] });
+      toast.success("Đã bỏ hạn chế người dùng");
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || "Không thể bỏ hạn chế người dùng",
       );
     },
   });

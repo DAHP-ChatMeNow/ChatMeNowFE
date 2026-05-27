@@ -59,6 +59,11 @@ export interface MarkConversationAsReadResponse {
   unreadCount?: number;
 }
 
+export interface AcceptMessageRequestResponse {
+  success: boolean;
+  conversation: Conversation;
+}
+
 export interface MessagesResponse {
   messages: Message[];
   conversation?: Conversation;
@@ -580,6 +585,16 @@ export const chatService = {
       lastReadAt: res.data?.lastReadAt ? String(res.data.lastReadAt) : undefined,
       unreadCount: Number(res.data?.unreadCount || 0),
     };
+  },
+
+  acceptMessageRequest: async (
+    conversationId: string,
+  ): Promise<Conversation> => {
+    const res = await api.post<AcceptMessageRequestResponse | any>(
+      `/chat/conversations/${conversationId}/accept-request`,
+    );
+    const conversation = res.data?.conversation || res.data;
+    return mapMongoId(conversation);
   },
 
   clearConversationHistory: async (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Search, Edit, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -20,7 +20,7 @@ import {
   useConversations,
   useCreateConversation,
 } from "@/hooks/use-chat";
-import { useContacts } from "@/hooks/use-contact";
+import { useContacts, useRestrictedUsers } from "@/hooks/use-contact";
 import { useAuthStore } from "@/store/use-auth-store";
 import { ChatListSkeleton } from "@/components/skeletons/chat-list-skeleton";
 import { ConversationItemDisplay } from "./conversation-item-display";
@@ -32,11 +32,22 @@ type ChatConversation = Conversation & {
   isAiAssistant?: boolean;
 };
 
+const isPendingConversation = (conversation: ChatConversation) => {
+  return (
+    conversation.listCategory === "pending" ||
+    (conversation.isMessageRequestPending === true &&
+      conversation.isMessageRequestSentByViewer !== true)
+  );
+};
+
 export function ChatSidebar() {
   const [open, setOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [query, setQuery] = useState("");
+  const [mailboxFilter, setMailboxFilter] = useState<"inbox" | "pending">(
+    "inbox",
+  );
   const [typeFilter, setTypeFilter] = useState<"all" | "private" | "group">(
     "all",
   );
@@ -80,38 +91,83 @@ export function ChatSidebar() {
       );
     };
 
-    const sortedConversations = Array.from(merged.values()).sort(
-      (left, right) => {
-        const leftAi = isAiConversation(left) ? 1 : 0;
-        const rightAi = isAiConversation(right) ? 1 : 0;
+    const getActivityTimestamp = (conversation: ChatConversation) => {
+      const lastMessageAt = toTimestamp(conversation.lastMessage?.createdAt);
+      if (lastMessageAt > 0) return lastMessageAt;
+      return toTimestamp(conversation.createdAt);
+    };
 
-        if (leftAi !== rightAi) return rightAi - leftAi;
+    const sortedConversations = Array.from(merged.values()).sort((left, right) => {
+      return getActivityTimestamp(right) - getActivityTimestamp(left);
+    });
 
-        return toTimestamp(right.updatedAt) - toTimestamp(left.updatedAt);
-      },
+    const firstAiConversation = sortedConversations.find((conversation) =>
+      isAiConversation(conversation),
     );
+    const firstAiConversationKey = firstAiConversation
+      ? getConversationKey(firstAiConversation)
+      : "";
 
-    let hasAiConversation = false;
     return sortedConversations.filter((conversation) => {
       if (!isAiConversation(conversation)) {
         return true;
       }
 
-      if (hasAiConversation) {
-        return false;
-      }
-
-      hasAiConversation = true;
-      return true;
+      return getConversationKey(conversation) === firstAiConversationKey;
     });
   }, [conversationsData, aiConversationData]);
   const { data: contactsData } = useContacts();
+  const { data: restrictedUsersData } = useRestrictedUsers();
   const contacts = contactsData?.contacts || [];
   const createMutation = useCreateConversation();
 
   const currentUserId = user?.id || user?._id;
+  const restrictedUserIdSet = useMemo(() => {
+    const restrictedUsers = restrictedUsersData?.restrictedUsers || [];
+    return new Set(
+      restrictedUsers
+        .map((restrictedUser) =>
+          String(restrictedUser?.id || restrictedUser?._id || ""),
+        )
+        .filter(Boolean),
+    );
+  }, [restrictedUsersData?.restrictedUsers]);
+  const isConversationRestricted = useCallback(
+    (conversation: ChatConversation) => {
+      if (conversation.type !== "private") return false;
+      if (!currentUserId) return false;
+      const partnerId =
+        conversation.members
+          ?.map((member) => {
+            const raw = member?.userId as
+              | string
+              | { _id?: string; id?: string }
+              | undefined;
+            return typeof raw === "string"
+              ? raw
+              : String(raw?._id || raw?.id || "");
+          })
+          .find((memberId) => memberId && memberId !== currentUserId) || "";
+
+      return Boolean(partnerId && restrictedUserIdSet.has(partnerId));
+    },
+    [currentUserId, restrictedUserIdSet],
+  );
 
   const normalizedQuery = query.trim().toLowerCase();
+  const pendingConversations = useMemo(
+    () =>
+      conversations.filter(
+        (conversation) =>
+          isPendingConversation(conversation) &&
+          !isConversationRestricted(conversation),
+      ),
+    [conversations, isConversationRestricted],
+  );
+  const inboxConversations = useMemo(
+    () => conversations.filter((conversation) => !isPendingConversation(conversation)),
+    [conversations],
+  );
 
   const filteredConversations = useMemo(() => {
     const isAiConversation = (conversation: ChatConversation) => {
@@ -125,6 +181,14 @@ export function ChatSidebar() {
     };
 
     return conversations.filter((conversation) => {
+      const matchMailbox =
+        mailboxFilter === "pending"
+          ? isPendingConversation(conversation) &&
+            !isConversationRestricted(conversation)
+          : !isPendingConversation(conversation);
+
+      if (!matchMailbox) return false;
+
       const matchType =
         typeFilter === "all"
           ? true
@@ -146,31 +210,41 @@ export function ChatSidebar() {
 
       return searchable.includes(normalizedQuery);
     });
-  }, [conversations, normalizedQuery, typeFilter]);
+  }, [conversations, mailboxFilter, normalizedQuery, typeFilter]);
+
+  useEffect(() => {
+    if (mailboxFilter !== "pending") return;
+    if (pendingConversations.length > 0) return;
+    setMailboxFilter("inbox");
+  }, [mailboxFilter, pendingConversations.length]);
 
   const filterBtnClass = (isActive: boolean) =>
-    `rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-colors ${
+    `rounded-full px-3 py-1.5 text-xs font-semibold whitespace-nowrap transition-all ${
       isActive
-        ? "bg-blue-600 text-white"
-        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+        ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow"
+        : "bg-slate-100/90 text-slate-600 hover:bg-slate-200 hover:text-slate-700"
     }`;
 
   return (
-    <aside className="flex flex-col w-full h-full border-r border-slate-200/60 bg-gradient-to-b from-white to-slate-50/20 shrink-0">
+    <aside className="flex h-full w-full shrink-0 flex-col border-r border-slate-200/70 bg-gradient-to-b from-slate-50 via-white to-blue-50/30">
       <div className="flex items-center justify-between px-4 pt-3 pb-2 md:px-5 md:pt-4">
         <div className="min-w-0">
-          <h2 className="text-xl font-bold leading-tight text-blue-600">
+          <h2 className="bg-gradient-to-r from-blue-600 via-indigo-600 to-cyan-600 bg-clip-text text-xl font-extrabold leading-tight text-transparent">
             Tin nhắn
           </h2>
           <p className="text-xs text-slate-500 mt-0.5">
-            {filteredConversations.length}/{conversations.length} cuộc hội thoại
+            {filteredConversations.length}/
+            {mailboxFilter === "pending"
+              ? pendingConversations.length
+              : inboxConversations.length}{" "}
+            cuộc hội thoại
           </p>
         </div>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <button
               aria-label="Tạo cuộc trò chuyện"
-              className="flex items-center justify-center w-10 h-10 transition-colors rounded-xl bg-slate-100/80 hover:bg-slate-200/80"
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200/80 bg-white/90 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:bg-blue-50/80 hover:shadow"
             >
               <Edit className="w-5 h-5 text-slate-700" />
             </button>
@@ -275,13 +349,41 @@ export function ChatSidebar() {
       </div>
 
       <div className="px-4 pb-2 md:px-5">
+        <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200/80 bg-white/90 p-1 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setMailboxFilter("inbox")}
+            className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              mailboxFilter === "inbox"
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow"
+                : "text-slate-500 hover:bg-slate-100/80 hover:text-slate-800"
+            }`}
+          >
+            Hộp thư
+          </button>
+          <button
+            type="button"
+            onClick={() => setMailboxFilter("pending")}
+            className={`rounded-xl px-3 py-2 text-sm font-semibold transition ${
+              mailboxFilter === "pending"
+                ? "bg-gradient-to-r from-blue-600 to-indigo-600 text-white shadow"
+                : "text-slate-500 hover:bg-slate-100/80 hover:text-slate-800"
+            }`}
+          >
+            Danh sách chờ
+            {pendingConversations.length > 0 ? ` (${pendingConversations.length})` : ""}
+          </button>
+        </div>
+      </div>
+
+      <div className="px-4 pb-2 md:px-5">
         <div className="relative">
           <Search className="absolute w-4 h-4 -translate-y-1/2 left-3.5 top-1/2 text-slate-400" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Tìm kiếm cuộc trò chuyện..."
-            className="pl-10 pr-10 bg-white border shadow-sm border-slate-200/80 h-11 rounded-xl focus-visible:ring-2 focus-visible:ring-blue-500/20"
+            className="h-11 rounded-2xl border border-slate-200/80 bg-white/95 pl-10 pr-10 shadow-sm focus-visible:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-500/20"
           />
           {query ? (
             <button
@@ -344,7 +446,9 @@ export function ChatSidebar() {
           </div>
         ) : (
           <div className="px-4 py-8 text-sm text-center text-slate-500">
-            Không có cuộc hội thoại phù hợp
+            {mailboxFilter === "pending"
+              ? "Không có cuộc hội thoại nào trong danh sách chờ"
+              : "Không có cuộc hội thoại phù hợp"}
           </div>
         )}
       </ScrollArea>

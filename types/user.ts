@@ -1,4 +1,5 @@
 export type AccountStatus = "active" | "suspended" | "locked";
+export type MessageReceiveSetting = "all" | "friends" | "none";
 
 export interface UserAccountRef {
   _id?: string;
@@ -26,6 +27,7 @@ export interface User {
   coverImage?: string;
   language?: string;
   themeColor?: string;
+  messageReceiveSetting?: MessageReceiveSetting;
   isOnline: boolean;
   lastSeen?: Date;
   lastSeenText?: string;
@@ -34,6 +36,7 @@ export interface User {
   mutualFriendsCount?: number;
   friends: string[];
   blockedUsers?: string[];
+  restrictedUsers?: string[];
   accountStatus?: AccountStatus;
   suspendedUntil?: string | Date;
   statusReason?: string;

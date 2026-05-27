@@ -237,6 +237,27 @@ export const useMarkConversationAsRead = () => {
   });
 };
 
+export const useAcceptMessageRequest = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (conversationId: string) =>
+      chatService.acceptMessageRequest(conversationId),
+    onSuccess: (conversation, conversationId) => {
+      queryClient.setQueryData(["conversation", conversationId], conversation);
+      queryClient.invalidateQueries({ queryKey: ["conversation", conversationId] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+      toast.success("Đã chuyển cuộc trò chuyện vào hộp thư");
+    },
+    onError: (error: any) => {
+      toast.error(
+        error?.response?.data?.message || "Không thể chấp nhận cuộc trò chuyện",
+      );
+    },
+  });
+};
+
 export const useAiConversation = () => {
   return useQuery({
     queryKey: ["ai-conversation"],
@@ -382,6 +403,9 @@ export const useSendMessage = () => {
       );
 
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
+      queryClient.invalidateQueries({
+        queryKey: ["conversation", variables.conversationId],
+      });
     },
     onError: (error: any, variables, context) => {
       queryClient.setQueryData<MessagesResponse>(

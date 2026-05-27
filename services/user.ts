@@ -1,5 +1,5 @@
 import api from "@/lib/axios";
-import { User, AccountStatus } from "@/types/user";
+import { User, AccountStatus, MessageReceiveSetting } from "@/types/user";
 
 export interface UpdateProfilePayload {
   displayName?: string;
@@ -11,6 +11,7 @@ export interface UpdateProfilePayload {
   maritalStatus?: string;
   language?: string;
   themeColor?: string;
+  messageReceiveSetting?: MessageReceiveSetting;
 }
 
 export interface UpdateProfileResponse {
@@ -78,6 +79,12 @@ export interface BlockedUsersResponse {
   total: number;
 }
 
+export interface RestrictedUsersResponse {
+  success: boolean;
+  restrictedUsers: User[];
+  total: number;
+}
+
 export interface BlockUserResponse {
   success: boolean;
   message: string;
@@ -85,6 +92,17 @@ export interface BlockUserResponse {
 }
 
 export interface UnblockUserResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface RestrictUserResponse {
+  success: boolean;
+  message: string;
+  restrictedUser: Pick<User, "id" | "_id" | "displayName" | "avatar">;
+}
+
+export interface UnrestrictUserResponse {
   success: boolean;
   message: string;
 }
@@ -320,6 +338,17 @@ export const userService = {
   },
 
   /**
+   * Get restricted users of current user
+   */
+  getRestrictedUsers: async () => {
+    const res = await api.get<RestrictedUsersResponse>("/users/restricted");
+    res.data.restrictedUsers = (res.data.restrictedUsers || []).map((user: any) =>
+      mapMongoUser(user),
+    );
+    return res.data;
+  },
+
+  /**
    * Block a user
    */
   blockUser: async (userId: string) => {
@@ -336,6 +365,27 @@ export const userService = {
   unblockUser: async (userId: string) => {
     const res = await api.delete<UnblockUserResponse>(
       `/users/blocked/${userId}`,
+    );
+    return res.data;
+  },
+
+  /**
+   * Add a user to restricted list
+   */
+  restrictUser: async (userId: string) => {
+    const res = await api.post<RestrictUserResponse>(`/users/${userId}/restrict`);
+    return {
+      ...res.data,
+      restrictedUser: mapMongoUser(res.data.restrictedUser as User),
+    };
+  },
+
+  /**
+   * Remove a user from restricted list
+   */
+  unrestrictUser: async (userId: string) => {
+    const res = await api.delete<UnrestrictUserResponse>(
+      `/users/restricted/${userId}`,
     );
     return res.data;
   },

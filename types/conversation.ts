@@ -32,6 +32,16 @@ export interface Conversation {
   id: string;
   _id: string;
   type: string;
+  requestStatus?: "accepted" | "pending";
+  requestInitiatorId?: string | null;
+  requestRecipientId?: string | null;
+  pendingMessageCount?: number;
+  requestAcceptedByRecipient?: boolean;
+  isMessageRequestPending?: boolean;
+  isMessageRequestSentByViewer?: boolean;
+  canCurrentUserSend?: boolean;
+  remainingMessageQuota?: number | null;
+  listCategory?: "inbox" | "pending";
   isAI?: boolean;
   isAi?: boolean;
   isAiAssistant?: boolean;

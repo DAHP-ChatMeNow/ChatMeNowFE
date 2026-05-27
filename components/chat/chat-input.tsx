@@ -453,7 +453,7 @@ export function ChatInput({
   );
 
   return (
-    <div className="px-3 py-4 md:px-6 md:py-5 border-t border-slate-200/60 bg-white/88 backdrop-blur-xl">
+    <div className="border-t border-slate-200/70 bg-white/90 px-3 py-4 backdrop-blur-xl md:px-6 md:py-5">
       {replyPreview && (
         <div className="w-full max-w-[1240px] mx-auto mb-3 flex items-start justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2.5">
           <div className="min-w-0">
@@ -491,19 +491,19 @@ export function ChatInput({
           </div>
         </div>
       )}
-      <div className="flex items-center gap-3 w-full max-w-[1240px] mx-auto">
+      <div className="mx-auto flex w-full max-w-[1240px] items-center gap-3 rounded-3xl border border-slate-200/70 bg-white/90 px-2.5 py-2 shadow-sm">
         <div className="flex items-center gap-2">
           <button
             disabled={disabled}
             onClick={() => imageInputRef.current?.click()}
-            className="p-2.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-xl transition-all duration-200 hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="rounded-xl p-2.5 text-slate-400 transition-all duration-200 hover:scale-105 hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ImageIcon className="w-5 h-5" />
           </button>
           <button
             disabled={disabled}
             onClick={() => fileInputRef.current?.click()}
-            className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
+            className="hidden rounded-full p-2 text-slate-400 transition-all hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 sm:block"
           >
             <Paperclip className="w-5 h-5" />
           </button>
@@ -511,7 +511,7 @@ export function ChatInput({
             <button
               disabled={disabled}
               onClick={onOpenPollDialog}
-              className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-all disabled:opacity-50 disabled:cursor-not-allowed hidden sm:block"
+                className="hidden rounded-full p-2 text-slate-400 transition-all hover:bg-blue-50 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-50 sm:block"
             >
               <BarChart2 className="w-5 h-5" />
             </button>
@@ -519,7 +519,7 @@ export function ChatInput({
           <button
             disabled={disabled || isSendingAttachment}
             onClick={handleMicClick}
-            className={`p-2 rounded-full transition-all hidden sm:block disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`hidden rounded-full p-2 transition-all disabled:cursor-not-allowed disabled:opacity-50 sm:block ${
               isRecording
                 ? "text-rose-600 bg-rose-50"
                 : "text-slate-400 hover:text-blue-600 hover:bg-blue-50"
@@ -579,7 +579,7 @@ export function ChatInput({
             }}
             placeholder="Nhập tin nhắn..."
             disabled={disabled}
-            className="w-full bg-slate-50 border border-slate-200/80 shadow-sm h-12 rounded-2xl pl-5 pr-12 focus-visible:ring-2 focus-visible:ring-blue-500/20 focus-visible:border-blue-300 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-12 w-full rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 pl-5 pr-12 shadow-sm focus-visible:border-blue-300 focus-visible:ring-2 focus-visible:ring-blue-500/20 disabled:cursor-not-allowed disabled:opacity-50"
           />
           <button
             type="button"

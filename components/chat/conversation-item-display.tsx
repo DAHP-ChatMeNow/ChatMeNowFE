@@ -31,6 +31,24 @@ type GroupAvatarMemberView = {
   avatar?: string;
 };
 
+const FORWARDED_MESSAGE_MARKER = "[chatmenow-forwarded]";
+const FORWARDED_FROM_PREFIX = "[chatmenow-forwarded-from]";
+
+const parseForwardedPreview = (content?: string) => {
+  const raw = String(content || "");
+  if (!raw.startsWith(FORWARDED_MESSAGE_MARKER)) {
+    return { isForwarded: false, forwardedFrom: "", displayContent: raw };
+  }
+
+  const stripped = raw.slice(FORWARDED_MESSAGE_MARKER.length).replace(/^\n+/, "");
+  const lines = stripped.split("\n");
+  const firstLine = String(lines[0] || "").trim();
+  const hasFrom = firstLine.startsWith(FORWARDED_FROM_PREFIX);
+  const forwardedFrom = hasFrom ? firstLine.slice(FORWARDED_FROM_PREFIX.length).trim() : "";
+  const displayContent = hasFrom ? lines.slice(1).join("\n") : stripped;
+  return { isForwarded: true, forwardedFrom, displayContent };
+};
+
 const getMemberUserId = (
   member: ChatConversationMember,
 ): string | undefined => {
@@ -71,7 +89,20 @@ const formatLastMessagePreview = (conversation: Conversation): string => {
     return "Đã chia sẻ một bài viết";
   }
 
-  return lastMessage.content || "Chưa có tin nhắn";
+  const { isForwarded, forwardedFrom, displayContent } = parseForwardedPreview(
+    lastMessage.content,
+  );
+  const safeContent = String(displayContent || "").trim();
+  if (isForwarded) {
+    if (safeContent) {
+      return forwardedFrom
+        ? `Chuyển tiếp từ ${forwardedFrom}: ${safeContent}`
+        : `Chuyển tiếp: ${safeContent}`;
+    }
+    return forwardedFrom ? `Chuyển tiếp từ ${forwardedFrom}` : "Tin nhắn chuyển tiếp";
+  }
+
+  return safeContent || "Chưa có tin nhắn";
 };
 
 const isAiConversation = (conversation: Conversation): boolean => {
@@ -112,6 +143,7 @@ export function ConversationItemDisplay({
     : conversation.blockedByOther
       ? "Người này đã chặn bạn"
       : undefined;
+  const statusLabel = undefined;
 
   const fallbackName = isAi ? "Chat AI" : "Unknown";
   const fallbackLastMessage = isAi
@@ -200,6 +232,7 @@ export function ConversationItemDisplay({
       avatar={avatar}
       name={displayName || conversation.name || fallbackName}
       lastMsg={formatLastMessagePreview(conversation) || fallbackLastMessage}
+      statusLabel={statusLabel}
       time={formatMessageTime(conversation.lastMessage?.createdAt)}
       unread={safeUnreadCount}
       isActive={isActive}

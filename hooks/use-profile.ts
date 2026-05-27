@@ -35,6 +35,7 @@ export const useUpdateProfile = () => {
 
       queryClient.invalidateQueries({ queryKey: ["profile"] });
       queryClient.invalidateQueries({ queryKey: ["user"] });
+      queryClient.invalidateQueries({ queryKey: ["conversations"] });
 
       toast.success("Hồ sơ đã được cập nhật");
     },

@@ -2,8 +2,8 @@
 
 import { Bell, UserPlus, MessageSquare, Heart, Loader } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { PresignedAvatar } from "@/components/ui/presigned-avatar";
 import { useRouter } from "next/navigation";
 import {
   useNotifications,
@@ -182,131 +182,126 @@ export default function NotificationsPage() {
             </div>
           ) : notifications.length > 0 ? (
             notifications.map((noti, index) => (
-                <div
-                  key={`${noti.id}-${index}`}
-                  className={`flex items-start gap-4 p-4 rounded-2xl transition-all cursor-pointer ${noti.isRead ? "hover:bg-slate-50" : "bg-blue-50/40 border border-blue-100 shadow-sm"}`}
-                  onClick={() => handleOpenNotification(noti)}
-                  role={noti.targetUrl ? "button" : undefined}
-                  tabIndex={noti.targetUrl ? 0 : -1}
-                  onKeyDown={(event) => {
-                    if (!noti.targetUrl) return;
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      handleOpenNotification(noti);
-                    }
-                  }}
-                >
-                  <div className="relative">
-                    <Avatar className="w-12 h-12 border border-white shadow-sm">
-                      <AvatarImage
-                        src={getSenderAvatar(noti)}
-                        alt={getSenderName(noti)}
-                      />
-                      <AvatarFallback className="font-bold bg-slate-100">
-                        {getSenderName(noti).charAt(0).toUpperCase()}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div
-                      className={`absolute -bottom-1 -right-1 p-1 rounded-full border-2 border-white ${getNotificationBgColor(noti.type)}`}
-                    >
-                      {getNotificationIcon(noti.type)}
-                    </div>
+              <div
+                key={`${noti.id}-${index}`}
+                className={`flex items-start gap-4 rounded-[22px] px-4 py-4 transition-all ${
+                  noti.targetUrl ? "cursor-pointer" : ""
+                } ${
+                  noti.isRead
+                    ? "bg-white hover:bg-slate-50/80"
+                    : "bg-sky-50/90 shadow-[inset_0_0_0_1px_rgba(59,130,246,0.08)]"
+                }`}
+                onClick={() => handleOpenNotification(noti)}
+                role={noti.targetUrl ? "button" : undefined}
+                tabIndex={noti.targetUrl ? 0 : -1}
+                onKeyDown={(event) => {
+                  if (!noti.targetUrl) return;
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    handleOpenNotification(noti);
+                  }
+                }}
+              >
+                <div className="relative shrink-0">
+                  <PresignedAvatar
+                    avatarKey={getSenderAvatar(noti)}
+                    displayName={getSenderName(noti)}
+                    className="h-14 w-14 border border-white shadow-sm"
+                    fallbackClassName="bg-slate-100 font-bold text-slate-700"
+                  />
+                  <div
+                    className={`absolute -bottom-1 -right-1 rounded-full border-2 border-white p-1.5 ${getNotificationBgColor(noti.type)}`}
+                  >
+                    {getNotificationIcon(noti.type)}
                   </div>
-
-                  <div className="flex-1 space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] ${
-                          noti.isRead
-                            ? "bg-slate-100 text-slate-500"
-                            : "bg-blue-100 text-blue-700"
-                        }`}
-                      >
-                        {noti.isRead ? "Đã đọc" : "Chưa đọc"}
-                      </span>
-                    </div>
-
-                    <p
-                      className={`text-[14.5px] leading-tight text-slate-900 ${
-                        noti.isRead ? "font-normal" : "font-semibold"
-                      }`}
-                    >
-                      <span className="font-semibold">
-                        {getSenderName(noti)}{" "}
-                      </span>
-                      {noti.displayText || noti.message}
-                    </p>
-                    <p className="text-[12px] text-slate-400 font-medium">
-                      {formatTime(noti.createdAt)}
-                    </p>
-                    {noti.type === "friend_request" && !noti.isRead && (
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          size="sm"
-                          className="h-8 px-4 bg-blue-600 rounded-lg hover:bg-blue-700"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleAcceptFriendRequest(
-                              noti.id,
-                              getReferencedId(noti),
-                            );
-                          }}
-                          disabled={acceptingIds.includes(noti.id)}
-                        >
-                          {acceptingIds.includes(noti.id) ? (
-                            <Loader className="w-3 h-3 animate-spin" />
-                          ) : (
-                            "Chấp nhận"
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-8 px-4 rounded-lg"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleRejectFriendRequest(
-                              noti.id,
-                              getReferencedId(noti),
-                            );
-                          }}
-                          disabled={rejectingIds.includes(noti.id)}
-                        >
-                          {rejectingIds.includes(noti.id) ? (
-                            <Loader className="w-3 h-3 animate-spin" />
-                          ) : (
-                            "Từ chối"
-                          )}
-                        </Button>
-                      </div>
-                    )}
-
-                    {noti.type === "group_member_request" &&
-                    noti.metadata?.status !== "approved" ? (
-                      <div className="flex gap-2 mt-3">
-                        <Button
-                          size="sm"
-                          className="h-8 px-4 bg-violet-600 rounded-lg hover:bg-violet-700"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            handleApproveGroupMemberRequest(noti.id);
-                          }}
-                          disabled={approvingIds.includes(noti.id)}
-                        >
-                          {approvingIds.includes(noti.id) ? (
-                            <Loader className="w-3 h-3 animate-spin" />
-                          ) : (
-                            "Duyệt"
-                          )}
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                  {!noti.isRead && (
-                    <div className="w-2.5 h-2.5 bg-blue-600 rounded-full mt-2" />
-                  )}
                 </div>
-              ))
+
+                <div className="min-w-0 flex-1">
+                  <p
+                    className={`text-[15px] leading-6 text-slate-900 ${
+                      noti.isRead ? "font-medium" : "font-semibold"
+                    }`}
+                  >
+                    <span className="font-bold">{getSenderName(noti)} </span>
+                    {noti.displayText || noti.message}
+                  </p>
+                  <p
+                    className={`mt-1 text-sm ${
+                      noti.isRead ? "text-slate-500" : "text-slate-600"
+                    }`}
+                  >
+                    {formatTime(noti.createdAt)}
+                  </p>
+
+                  {noti.type === "friend_request" && !noti.isRead && (
+                    <div className="mt-4 flex gap-3">
+                      <Button
+                        size="sm"
+                        className="h-10 min-w-[132px] rounded-xl bg-blue-600 px-5 text-sm font-semibold hover:bg-blue-700"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleAcceptFriendRequest(
+                            noti.id,
+                            getReferencedId(noti),
+                          );
+                        }}
+                        disabled={acceptingIds.includes(noti.id)}
+                      >
+                        {acceptingIds.includes(noti.id) ? (
+                          <Loader className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Chấp nhận"
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-10 min-w-[132px] rounded-xl border-slate-200 bg-white px-5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleRejectFriendRequest(
+                            noti.id,
+                            getReferencedId(noti),
+                          );
+                        }}
+                        disabled={rejectingIds.includes(noti.id)}
+                      >
+                        {rejectingIds.includes(noti.id) ? (
+                          <Loader className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Từ chối"
+                        )}
+                      </Button>
+                    </div>
+                  )}
+
+                  {noti.type === "group_member_request" &&
+                  noti.metadata?.status !== "approved" ? (
+                    <div className="mt-4 flex gap-3">
+                      <Button
+                        size="sm"
+                        className="h-10 rounded-xl bg-violet-600 px-5 text-sm font-semibold hover:bg-violet-700"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          handleApproveGroupMemberRequest(noti.id);
+                        }}
+                        disabled={approvingIds.includes(noti.id)}
+                      >
+                        {approvingIds.includes(noti.id) ? (
+                          <Loader className="h-4 w-4 animate-spin" />
+                        ) : (
+                          "Duyệt"
+                        )}
+                      </Button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {!noti.isRead && (
+                  <div className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-blue-600" />
+                )}
+              </div>
+            ))
           ) : (
             <div className="py-12 text-center text-slate-500">
               Bạn không có thông báo nào
