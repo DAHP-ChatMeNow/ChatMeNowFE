@@ -52,6 +52,7 @@ import {
   useConfirmAccountLock,
   useSendAccountLockOtp,
   useVerifyAccountLockOtp,
+  useChangePassword,
 } from "@/hooks/use-auth";
 import { useUpdateProfile } from "@/hooks/use-profile";
 import { userService } from "@/services/user";
@@ -200,7 +201,7 @@ export default function SettingsPage() {
   const [currentPw, setCurrentPw] = useState("");
   const [newPw, setNewPw] = useState("");
   const [confirmPw, setConfirmPw] = useState("");
-  const [isChangingPw, setIsChangingPw] = useState(false);
+  const { mutate: changePassword, isPending: isChangingPw } = useChangePassword();
 
   const [phone, setPhone] = useState(user?.phone || "");
   const [isSavingPhone, setIsSavingPhone] = useState(false);
@@ -237,7 +238,7 @@ export default function SettingsPage() {
     router.push("/login");
   };
 
-  const handleChangePassword = async () => {
+  const handleChangePassword = () => {
     if (!currentPw || !newPw || !confirmPw) {
       toast.error("Vui lòng điền đầy đủ thông tin");
       return;
@@ -250,14 +251,24 @@ export default function SettingsPage() {
       toast.error("Mật khẩu xác nhận không khớp");
       return;
     }
-    setIsChangingPw(true);
-    await new Promise((r) => setTimeout(r, 1000)); // TODO: call API
-    setIsChangingPw(false);
-    toast.success("Đổi mật khẩu thành công!");
-    setCurrentPw("");
-    setNewPw("");
-    setConfirmPw("");
-    setShowChangePassword(false);
+    if (newPw === currentPw) {
+      toast.error("Mật khẩu mới phải khác mật khẩu hiện tại");
+      return;
+    }
+
+    changePassword(
+      { currentPassword: currentPw, newPassword: newPw, confirmPassword: confirmPw },
+      {
+        onSuccess: () => {
+          setCurrentPw("");
+          setNewPw("");
+          setConfirmPw("");
+          setShowChangePassword(false);
+          logout();
+          router.push("/login");
+        },
+      }
+    );
   };
 
   const handleSavePhone = async () => {

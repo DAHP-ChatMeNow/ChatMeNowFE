@@ -8,7 +8,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Mail, ArrowLeft } from "lucide-react";
 import { useState } from "react";
-import { toast } from "sonner";
+import { useForgotPassword } from "@/hooks/use-auth";
 
 const forgotPasswordSchema = z.object({
   email: z.string().email("Email không hợp lệ"),
@@ -18,6 +18,7 @@ type ForgotPasswordFormValues = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
   const [isSubmitted, setIsSubmitted] = useState(false);
+  const { mutate: forgotPassword, isPending } = useForgotPassword();
 
   const {
     register,
@@ -28,8 +29,11 @@ export default function ForgotPasswordPage() {
   });
 
   const onSubmit = (data: ForgotPasswordFormValues) => {
-    toast.success("Đã gửi email khôi phục mật khẩu!");
-    setIsSubmitted(true);
+    forgotPassword(data, {
+      onSuccess: () => {
+        setIsSubmitted(true);
+      },
+    });
   };
 
   return (
@@ -75,6 +79,7 @@ export default function ForgotPasswordPage() {
                     type="email"
                     placeholder="example@email.com"
                     className="h-12 pl-10 pr-4 border-slate-200 focus:border-blue-500 focus:ring-blue-500"
+                    disabled={isPending}
                     {...register("email")}
                   />
                 </div>
@@ -89,9 +94,10 @@ export default function ForgotPasswordPage() {
               {/* Submit Button */}
               <Button
                 type="submit"
+                disabled={isPending}
                 className="w-full h-12 font-semibold text-white transition-all shadow-lg bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 rounded-xl shadow-blue-500/30"
               >
-                Gửi email khôi phục
+                {isPending ? "Đang gửi..." : "Gửi email khôi phục"}
               </Button>
             </form>
           ) : (

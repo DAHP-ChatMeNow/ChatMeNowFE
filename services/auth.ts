@@ -214,6 +214,40 @@ const confirmAccountUnlock = async (payload: ConfirmAccountUnlockPayload) => {
   return data;
 };
 
+const forgotPassword = async (payload: { email: string }) => {
+  const { data } = await api.post<{ success: boolean; message: string }>(
+    "/auth/forgot-password",
+    payload,
+  );
+  return data;
+};
+
+const resetPassword = async (payload: {
+  token: string;
+  password: string;
+  confirmPassword?: string;
+}) => {
+  const { data } = await api.post<{ success: boolean; message: string }>(
+    "/auth/reset-password",
+    payload,
+  );
+  return data;
+};
+
+export type ChangePasswordPayload = {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+};
+
+const changePassword = async (payload: ChangePasswordPayload) => {
+  const { data } = await api.put<{ message: string }>(
+    "/auth/change-password",
+    payload,
+  );
+  return data;
+};
+
 export const authService = {
   login,
   sendOtp,
@@ -228,4 +262,7 @@ export const authService = {
   confirmAccountLock,
   sendAccountUnlockOtp,
   confirmAccountUnlock,
+  forgotPassword,
+  resetPassword,
+  changePassword,
 };
