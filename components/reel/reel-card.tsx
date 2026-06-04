@@ -79,6 +79,25 @@ export function ReelCard({ reel, isActive }: ReelCardProps) {
         };
     }, [isActive, reel._id]);
 
+    // ── Prefetch comments when active (debounced) ──────────────────────────────
+    useEffect(() => {
+        if (!isActive || !reel._id) return;
+
+        const timer = setTimeout(() => {
+            qc.prefetchInfiniteQuery({
+                queryKey: ["reel-comments", reel._id],
+                queryFn: ({ pageParam }) =>
+                    reelService.getComments(reel._id, {
+                        pageParam: pageParam as string | null,
+                        limit: 15,
+                    }),
+                initialPageParam: null as string | null,
+            });
+        }, 400);
+
+        return () => clearTimeout(timer);
+    }, [isActive, reel._id, qc]);
+
     // ── Like (optimistic) ─────────────────────────────────────────────────────
     const { mutate: likeMutation } = useMutation({
         mutationFn: () => reelService.toggleLike(reel._id),
@@ -352,6 +371,7 @@ export function ReelCard({ reel, isActive }: ReelCardProps) {
                 reelId={reel._id}
                 open={commentDrawerOpen}
                 onClose={() => setCommentDrawerOpen(false)}
+                onCommentAdded={() => setCommentCount((prev) => prev + 1)}
             />
 
             <ShareFriendsModal

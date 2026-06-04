@@ -159,7 +159,7 @@ const addComment = async (
 
 const getComments = async (
     reelId: string,
-    { pageParam = null }: { pageParam?: string | null } = {}
+    { pageParam = null, limit = 15 }: { pageParam?: string | null; limit?: number } = {}
 ): Promise<ReelCommentsResult> => {
     const { data } = await api.get<{
         success: boolean;
@@ -167,7 +167,7 @@ const getComments = async (
         hasMore: boolean;
         nextCursor: string | null;
     }>(`/reels/${reelId}/comments`, {
-        params: { cursor: pageParam || undefined, limit: 20 },
+        params: { cursor: pageParam || undefined, limit },
     });
 
     return {

@@ -11,6 +11,7 @@ interface ReelCommentDrawerProps {
     reelId: string;
     open: boolean;
     onClose: () => void;
+    onCommentAdded?: () => void;
 }
 
 function timeAgo(date: Date | string) {
@@ -21,7 +22,7 @@ function timeAgo(date: Date | string) {
     }
 }
 
-export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerProps) {
+export function ReelCommentDrawer({ reelId, open, onClose, onCommentAdded }: ReelCommentDrawerProps) {
     const [content, setContent] = useState("");
     const [replyTo, setReplyTo] = useState<ReelComment | null>(null);
     const inputRef = useRef<HTMLInputElement>(null);
@@ -40,6 +41,17 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
         }
     }, [open]);
 
+    const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+        const target = e.currentTarget;
+        if (
+            target.scrollHeight - target.scrollTop - target.clientHeight < 50 &&
+            hasNextPage &&
+            !isFetchingNextPage
+        ) {
+            fetchNextPage();
+        }
+    };
+
     const handleSend = () => {
         const text = content.trim();
         if (!text || isSending) return;
@@ -53,6 +65,7 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                 onSuccess: () => {
                     setContent("");
                     setReplyTo(null);
+                    onCommentAdded?.();
                     // Scroll to bottom
                     setTimeout(() => {
                         if (listRef.current) {
@@ -83,27 +96,27 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
 
             {/* Drawer */}
             <div
-                className={`fixed bottom-0 left-0 right-0 z-[9991] flex flex-col bg-gray-950 border-t border-white/10 rounded-t-3xl shadow-2xl transition-transform duration-300 ${open ? "translate-y-0" : "translate-y-full"
+                className={`fixed bottom-0 left-0 right-0 z-[9991] flex flex-col bg-background text-foreground border-t border-border rounded-t-3xl shadow-2xl transition-transform duration-300 ${open ? "translate-y-0" : "translate-y-full"
                     }`}
                 style={{ maxHeight: "70vh" }}
             >
                 {/* Handle */}
                 <div className="flex justify-center pt-3 pb-1">
-                    <div className="w-10 h-1 rounded-full bg-white/20" />
+                    <div className="w-10 h-1 rounded-full bg-muted-foreground/20" />
                 </div>
 
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-2 border-b border-white/10">
+                <div className="flex items-center justify-between px-4 py-2 border-b border-border">
                     <div className="flex items-center gap-2">
-                        <MessageCircle className="w-4 h-4 text-white/60" />
-                        <span className="text-sm font-semibold text-white">Bình luận</span>
+                        <MessageCircle className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm font-semibold text-foreground">Bình luận</span>
                         {comments.length > 0 && (
-                            <span className="text-xs text-white/40">({comments.length})</span>
+                            <span className="text-xs text-muted-foreground">({comments.length})</span>
                         )}
                     </div>
                     <button
                         onClick={onClose}
-                        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-white/60"
+                        className="w-7 h-7 flex items-center justify-center rounded-full hover:bg-muted transition-colors text-muted-foreground"
                     >
                         <X className="w-4 h-4" />
                     </button>
@@ -112,16 +125,25 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                 {/* Comment list */}
                 <div
                     ref={listRef}
+                    onScroll={handleScroll}
                     className="flex-1 overflow-y-auto px-4 py-3 space-y-4"
                 >
                     {isLoading ? (
-                        <div className="flex items-center justify-center py-10">
-                            <Loader2 className="w-5 h-5 text-white/40 animate-spin" />
+                        <div className="space-y-4 py-2 animate-pulse">
+                            {[1, 2, 3].map((n) => (
+                                <div key={n} className="flex gap-2.5">
+                                    <div className="w-8 h-8 rounded-full bg-muted shrink-0" />
+                                    <div className="flex-1 space-y-2">
+                                        <div className="h-3 bg-muted rounded-full w-20" />
+                                        <div className="h-8 bg-muted rounded-2xl w-3/4" />
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     ) : comments.length === 0 ? (
                         <div className="text-center py-10">
-                            <p className="text-white/30 text-sm">Chưa có bình luận nào</p>
-                            <p className="text-white/20 text-xs mt-1">Hãy là người đầu tiên bình luận!</p>
+                            <p className="text-muted-foreground text-sm">Chưa có bình luận nào</p>
+                            <p className="text-muted-foreground/60 text-xs mt-1">Hãy là người đầu tiên bình luận!</p>
                         </div>
                     ) : (
                         comments.map((comment) => {
@@ -135,18 +157,18 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                                         className="w-8 h-8 shrink-0"
                                     />
                                     <div className="flex-1 min-w-0">
-                                        <div className="bg-white/6 rounded-2xl rounded-tl-sm px-3 py-2 inline-block max-w-full">
-                                            <p className="text-xs font-semibold text-white/80 mb-0.5">{name}</p>
-                                            <p className="text-sm text-white/90 break-words">{comment.content}</p>
+                                        <div className="bg-muted rounded-2xl rounded-tl-sm px-3 py-2 inline-block max-w-full border border-border/10">
+                                            <p className="text-xs font-semibold text-foreground/80 mb-0.5">{name}</p>
+                                            <p className="text-sm text-foreground/90 break-words">{comment.content}</p>
                                         </div>
                                         <div className="flex items-center gap-3 mt-1 ml-1">
-                                            <span className="text-[11px] text-white/30">{timeAgo(comment.createdAt)}</span>
+                                            <span className="text-[11px] text-muted-foreground">{timeAgo(comment.createdAt)}</span>
                                             <button
                                                 onClick={() => {
                                                     setReplyTo(comment);
                                                     inputRef.current?.focus();
                                                 }}
-                                                className="text-[11px] text-white/40 hover:text-primary transition-colors flex items-center gap-1"
+                                                className="text-[11px] text-muted-foreground hover:text-primary transition-colors flex items-center gap-1"
                                             >
                                                 <Reply className="w-3 h-3" />
                                                 Trả lời
@@ -166,7 +188,7 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                             className="w-full text-xs text-primary hover:text-primary/80 py-2 transition-colors"
                         >
                             {isFetchingNextPage ? (
-                                <Loader2 className="w-4 h-4 animate-spin mx-auto" />
+                                <Loader2 className="w-4 h-4 animate-spin mx-auto text-primary" />
                             ) : (
                                 "Xem thêm bình luận"
                             )}
@@ -181,14 +203,14 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                         <span className="text-xs text-primary/80 flex-1 truncate">
                             Trả lời <strong>{replyTo.user?.displayName || "User"}</strong>: {replyTo.content}
                         </span>
-                        <button onClick={() => setReplyTo(null)} className="text-white/40 hover:text-white">
+                        <button onClick={() => setReplyTo(null)} className="text-muted-foreground hover:text-foreground">
                             <X className="w-3.5 h-3.5" />
                         </button>
                     </div>
                 )}
 
                 {/* Input */}
-                <div className="flex items-center gap-2 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-white/10 bg-gray-950">
+                <div className="flex items-center gap-2 px-4 py-3 pb-[max(12px,env(safe-area-inset-bottom))] border-t border-border bg-background">
                     <input
                         ref={inputRef}
                         type="text"
@@ -197,7 +219,7 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                         onKeyDown={handleKeyDown}
                         placeholder={replyTo ? `Trả lời ${replyTo.user?.displayName || "User"}...` : "Viết bình luận..."}
                         maxLength={500}
-                        className="flex-1 bg-white/8 border border-white/10 rounded-full px-4 py-2.5 text-sm text-white placeholder-white/30 focus:outline-none focus:border-primary/60 transition-colors"
+                        className="flex-1 bg-background border border-input rounded-full px-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
                     />
                     <button
                         onClick={handleSend}
@@ -206,9 +228,9 @@ export function ReelCommentDrawer({ reelId, open, onClose }: ReelCommentDrawerPr
                         aria-label="Gửi bình luận"
                     >
                         {isSending ? (
-                            <Loader2 className="w-4 h-4 text-white animate-spin" />
+                            <Loader2 className="w-4 h-4 text-primary-foreground animate-spin" />
                         ) : (
-                            <Send className="w-4 h-4 text-white" />
+                            <Send className="w-4 h-4 text-primary-foreground" />
                         )}
                     </button>
                 </div>
