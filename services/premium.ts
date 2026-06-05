@@ -10,12 +10,19 @@ import {
   VnpayCheckoutResult,
 } from "@/types/premium";
 
-const pickPayload = <T>(raw: any): T => {
-  if (raw && typeof raw === "object") {
-    if (raw.data && typeof raw.data === "object") return raw.data as T;
-    if (raw.result && typeof raw.result === "object") return raw.result as T;
+const asRecord = (value: unknown): Record<string, unknown> =>
+  value && typeof value === "object" ? (value as Record<string, unknown>) : {};
+
+const pickPayload = <T>(raw: unknown): T => {
+  const source = asRecord(raw);
+  const data = source.data;
+  if (data && typeof data === "object") return data as T;
+  const result = source.result;
+  if (result && typeof result === "object") return result as T;
+  if (raw !== undefined) {
+    return raw as T;
   }
-  return raw as T;
+  return {} as T;
 };
 
 const toNumber = (value: unknown, fallback = 0) => {
@@ -34,64 +41,132 @@ const toBoolean = (value: unknown): boolean | undefined => {
   return undefined;
 };
 
-const normalizeTransaction = (raw: any): PremiumTransaction => ({
-  id: String(raw?.id || raw?._id || raw?.transactionId || ""),
-  transactionId: raw?.transactionId ? String(raw.transactionId) : undefined,
-  txnRef: raw?.txnRef ? String(raw.txnRef) : undefined,
-  vnpTxnRef: raw?.vnpTxnRef
-    ? String(raw.vnpTxnRef)
-    : raw?.vnp_TxnRef
-      ? String(raw.vnp_TxnRef)
-      : undefined,
-  planCode: raw?.planCode ? String(raw.planCode) : undefined,
-  planName: raw?.planName ? String(raw.planName) : undefined,
-  amount: raw?.amount != null ? toNumber(raw.amount) : undefined,
-  currency: raw?.currency ? String(raw.currency) : undefined,
-  status: raw?.status ? String(raw.status) : undefined,
-  createdAt: raw?.createdAt ? String(raw.createdAt) : undefined,
-  confirmedAt: raw?.confirmedAt ? String(raw.confirmedAt) : undefined,
-  note: raw?.note ? String(raw.note) : undefined,
-});
+const normalizeFeatureObject = (value: unknown): Record<string, boolean> => {
+  if (!value) return {};
 
-const normalizePlan = (raw: any): PremiumPlan => ({
-  code: String(raw?.code || raw?.planCode || ""),
-  name: String(raw?.name || raw?.title || "Premium"),
-  price: toNumber(raw?.price, 0),
-  durationDays: toNumber(raw?.durationDays, 0),
-  isRecommended: Boolean(raw?.isRecommended),
-  description: raw?.description ? String(raw.description) : undefined,
-  features: Array.isArray(raw?.features)
-    ? raw.features.filter((item: unknown) => typeof item === "string")
-    : undefined,
-  limits:
-    raw?.limits && typeof raw.limits === "object"
-      ? (raw.limits as Record<string, string | number | boolean | null | undefined>)
+  if (Array.isArray(value)) {
+    return value.reduce<Record<string, boolean>>((acc, item) => {
+      if (typeof item === "string" && item.trim()) {
+        acc[item.trim()] = true;
+      }
+      return acc;
+    }, {});
+  }
+
+  if (typeof value !== "object") return {};
+
+  return Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, boolean>
+  >((acc, [key, raw]) => {
+    const parsed = toBoolean(raw);
+    if (typeof parsed === "boolean") {
+      acc[key] = parsed;
+    }
+    return acc;
+  }, {});
+};
+
+const normalizeLimitObject = (
+  value: unknown,
+): Record<string, number | undefined> => {
+  if (!value || typeof value !== "object") return {};
+
+  return Object.entries(value as Record<string, unknown>).reduce<
+    Record<string, number | undefined>
+  >((acc, [key, raw]) => {
+    if (raw == null || raw === "") {
+      acc[key] = undefined;
+      return acc;
+    }
+    const parsed = Number(raw);
+    acc[key] = Number.isFinite(parsed) ? parsed : undefined;
+    return acc;
+  }, {});
+};
+
+const normalizeTransaction = (raw: unknown): PremiumTransaction => {
+  const item = asRecord(raw);
+  return {
+    id: String(item.id || item._id || item.transactionId || ""),
+    transactionId: item.transactionId ? String(item.transactionId) : undefined,
+    txnRef: item.txnRef ? String(item.txnRef) : undefined,
+    vnpTxnRef: item.vnpTxnRef
+      ? String(item.vnpTxnRef)
+      : item.vnp_TxnRef
+        ? String(item.vnp_TxnRef)
+        : undefined,
+    planCode: item.planCode ? String(item.planCode) : undefined,
+    planName: item.planName ? String(item.planName) : undefined,
+    amount: item.amount != null ? toNumber(item.amount) : undefined,
+    currency: item.currency ? String(item.currency) : undefined,
+    status: item.status ? String(item.status) : undefined,
+    createdAt: item.createdAt ? String(item.createdAt) : undefined,
+    confirmedAt: item.confirmedAt ? String(item.confirmedAt) : undefined,
+    note: item.note ? String(item.note) : undefined,
+  };
+};
+
+const normalizePlan = (raw: unknown): PremiumPlan => {
+  const item = asRecord(raw);
+  return {
+    code: String(item.code || item.planCode || ""),
+    title: item.title ? String(item.title) : undefined,
+    name: String(item.name || item.title || "Premium"),
+    price: toNumber(item.price, 0),
+    durationDays: toNumber(item.durationDays, 0),
+    isRecommended: Boolean(item.isRecommended),
+    isDefault: Boolean(item.isDefault || item.default),
+    disable: Boolean(item.disable),
+    createdAt: item.createdAt ? String(item.createdAt) : undefined,
+    description: item.description ? String(item.description) : undefined,
+    benefits: Array.isArray(item.benefits)
+      ? item.benefits.filter((entry: unknown) => typeof entry === "string")
       : undefined,
-});
+    features: normalizeFeatureObject(item.features),
+    limits: normalizeLimitObject(item.limits),
+  };
+};
 
 const getPremiumOverview = async (): Promise<PremiumOverview> => {
   const { data } = await api.get("/users/premium/overview");
-  const payload = pickPayload<any>(data);
+  const payload = pickPayload<Record<string, unknown>>(data);
+  const overview =
+    payload.overview && typeof payload.overview === "object"
+      ? asRecord(payload.overview)
+      : undefined;
+  const directPremium =
+    payload.premium && typeof payload.premium === "object"
+      ? asRecord(payload.premium)
+      : undefined;
+  const overviewPremium =
+    overview?.premium && typeof overview.premium === "object"
+      ? asRecord(overview.premium)
+      : undefined;
 
   const premiumLike =
-    payload?.premium && typeof payload.premium === "object"
-      ? payload.premium
-      : payload?.overview?.premium && typeof payload.overview.premium === "object"
-        ? payload.overview.premium
-        : undefined;
+    directPremium ||
+    overviewPremium ||
+    undefined;
 
-  const root =
-    payload?.overview && typeof payload.overview === "object"
-      ? payload.overview
-      : payload;
+  const root = overview || payload;
+  const rootAccount =
+    root.account && typeof root.account === "object"
+      ? asRecord(root.account)
+      : undefined;
+  const rootAccountId =
+    root.accountId && typeof root.accountId === "object"
+      ? asRecord(root.accountId)
+      : undefined;
+  const rootUser =
+    root.user && typeof root.user === "object"
+      ? asRecord(root.user)
+      : undefined;
+  const rootUserAccountId =
+    rootUser?.accountId && typeof rootUser.accountId === "object"
+      ? asRecord(rootUser.accountId)
+      : undefined;
   const accountLike =
-    (root?.account && typeof root.account === "object" ? root.account : undefined) ||
-    (root?.accountId && typeof root.accountId === "object"
-      ? root.accountId
-      : undefined) ||
-    (root?.user?.accountId && typeof root.user.accountId === "object"
-      ? root.user.accountId
-      : undefined);
+    rootAccount || rootAccountId || rootUserAccountId || undefined;
 
   const merged = {
     ...root,
@@ -136,6 +211,24 @@ const getPremiumOverview = async (): Promise<PremiumOverview> => {
         ? merged.premiumFeatures.filter((item: unknown) => typeof item === "string")
         : [];
 
+  const activePlanRaw =
+    (payload?.activePlan && typeof payload.activePlan === "object"
+      ? asRecord(payload.activePlan)
+      : undefined) ||
+    (root?.activePlan && typeof root.activePlan === "object"
+      ? asRecord(root.activePlan)
+      : undefined) ||
+    (merged?.activePlan && typeof merged.activePlan === "object"
+      ? asRecord(merged.activePlan)
+      : undefined);
+
+  const activePlanCode =
+    merged?.activePlanCode ??
+    merged?.planCode ??
+    merged?.currentPlanCode ??
+    activePlanRaw?.code ??
+    activePlanRaw?.planCode;
+
   return {
     isPremium:
       typeof resolvedIsPremium === "boolean"
@@ -149,6 +242,11 @@ const getPremiumOverview = async (): Promise<PremiumOverview> => {
           ? String(merged.planName)
           : undefined,
     premiumExpiryDate: resolvedExpiry,
+    activePlanCode:
+      activePlanCode != null && String(activePlanCode).trim() !== ""
+        ? String(activePlanCode)
+        : undefined,
+    activePlan: activePlanRaw ? normalizePlan(activePlanRaw) : undefined,
     features: featuresArray,
     limits:
       merged?.limits && typeof merged.limits === "object"
@@ -168,14 +266,16 @@ const getPremiumOverview = async (): Promise<PremiumOverview> => {
 
 const getPremiumPlans = async (): Promise<PremiumPlan[]> => {
   const { data } = await api.get("/users/premium/plans");
-  const payload = pickPayload<any>(data);
+  const payload = pickPayload<Record<string, unknown>>(data);
   const plansRaw = Array.isArray(payload?.plans)
     ? payload.plans
     : Array.isArray(payload)
       ? payload
       : [];
 
-  return plansRaw.map(normalizePlan);
+  return plansRaw
+    .map(normalizePlan)
+    .filter((plan) => !plan.disable);
 };
 
 const getPaymentTemplate = async (
@@ -185,7 +285,7 @@ const getPaymentTemplate = async (
     params: { planCode },
   });
 
-  const payload = pickPayload<any>(data);
+  const payload = pickPayload<Record<string, unknown>>(data);
   return {
     ...payload,
     planCode: payload?.planCode ? String(payload.planCode) : planCode,
@@ -210,7 +310,7 @@ const createMockCheckout = async (
   planCode: string,
 ): Promise<PremiumMockCheckoutResult> => {
   const { data } = await api.post("/users/premium/mock-checkout", { planCode });
-  const payload = pickPayload<any>(data);
+  const payload = pickPayload<Record<string, unknown>>(data);
 
   return {
     transactionId: String(
@@ -227,7 +327,7 @@ const confirmMockCheckout = async (
   const { data } = await api.post(
     `/users/premium/mock-checkout/${transactionId}/confirm`,
   );
-  const payload = pickPayload<any>(data);
+  const payload = pickPayload<Record<string, unknown>>(data);
 
   return {
     transactionId: String(
@@ -248,7 +348,7 @@ const getPremiumHistory = async ({
   const { data } = await api.get("/users/premium/history", {
     params: { page, limit },
   });
-  const payload = pickPayload<any>(data);
+  const payload = pickPayload<Record<string, unknown>>(data);
 
   const transactionsRaw = Array.isArray(payload?.transactions)
     ? payload.transactions
@@ -278,7 +378,7 @@ const createVnpayCheckout = async (
     orderInfo: payload.orderInfo,
   });
 
-  const normalized = pickPayload<any>(data);
+  const normalized = pickPayload<Record<string, unknown>>(data);
   const paymentUrl = String(normalized?.paymentUrl || normalized?.url || "");
   if (!paymentUrl) {
     throw new Error("Không nhận được link thanh toán VNPay");
