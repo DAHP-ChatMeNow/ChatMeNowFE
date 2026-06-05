@@ -18,6 +18,7 @@ import {
   VerifyOtpPayload,
   OtpResponse,
   AuthResponse,
+  ChangePasswordPayload,
 } from "@/services/auth";
 import {
   RememberedLoginPayload,
@@ -325,6 +326,48 @@ export const useConfirmAccountUnlock = () => {
     mutationFn: authService.confirmAccountUnlock,
     onSuccess: (data) => {
       toast.success(data.message ?? "Mở khóa tài khoản thành công");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+};
+
+export const useForgotPassword = () => {
+  return useMutation<{ success: boolean; message: string }, unknown, { email: string }>({
+    mutationFn: (payload) => authService.forgotPassword(payload),
+    onSuccess: (data) => {
+      toast.success(data.message || "Đã gửi email khôi phục mật khẩu!");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+};
+
+export const useResetPassword = () => {
+  const router = useRouter();
+  return useMutation<
+    { success: boolean; message: string },
+    unknown,
+    { token: string; password: string; confirmPassword?: string }
+  >({
+    mutationFn: (payload) => authService.resetPassword(payload),
+    onSuccess: (data) => {
+      toast.success(data.message || "Đặt lại mật khẩu thành công!");
+      router.push("/login");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error));
+    },
+  });
+};
+
+export const useChangePassword = () => {
+  return useMutation<{ message: string }, unknown, ChangePasswordPayload>({
+    mutationFn: (payload) => authService.changePassword(payload),
+    onSuccess: (data) => {
+      toast.success(data.message || "Đổi mật khẩu thành công!");
     },
     onError: (error) => {
       toast.error(getErrorMessage(error));
