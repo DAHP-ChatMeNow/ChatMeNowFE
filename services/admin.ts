@@ -39,6 +39,22 @@ export interface AdminUsersResponse {
   hasPrev?: boolean;
 }
 
+export interface AdminFriend {
+  _id?: string;
+  id?: string;
+  displayName: string;
+  avatar?: string;
+  isOnline?: boolean;
+  lastSeen?: string | Date;
+  lastSeenText?: string;
+}
+
+export interface AdminUserFriendsResponse {
+  success: boolean;
+  friends: AdminFriend[];
+  total: number;
+}
+
 export type AdminUserRoleFilter = "all" | "user" | "admin";
 export type AdminUserStatusFilter =
   | "all"
@@ -111,11 +127,9 @@ const updateUserAccountStatus = async (
 };
 
 const getUserFriends = async (userId: string) => {
-  const { data } = await api.get<{
-    success: boolean;
-    friends: unknown[];
-    total: number;
-  }>(`/users/${userId}/contacts`);
+  const { data } = await api.get<AdminUserFriendsResponse>(
+    `/users/${userId}/contacts`,
+  );
   return data;
 };
 
@@ -439,6 +453,11 @@ export interface AdminPremiumConfig {
   [key: string]: unknown;
 }
 
+const normalizePremiumConfig = (value: unknown): AdminPremiumConfig => {
+  if (!value || typeof value !== "object") return {};
+  return value as AdminPremiumConfig;
+};
+
 const toBoolean = (value: unknown): boolean | undefined => {
   if (typeof value === "boolean") return value;
   if (typeof value === "number") return value !== 0;
@@ -621,7 +640,7 @@ const getPremiumConfig = async (): Promise<AdminPremiumConfig> => {
     payload?.config && typeof payload.config === "object"
       ? payload.config
       : payload;
-  return config && typeof config === "object" ? config : {};
+  return normalizePremiumConfig(config);
 };
 
 const updatePremiumConfig = async (
@@ -633,9 +652,7 @@ const updatePremiumConfig = async (
     responsePayload?.config && typeof responsePayload.config === "object"
       ? responsePayload.config
       : responsePayload;
-  return config && typeof config === "object"
-    ? config
-    : {};
+  return normalizePremiumConfig(config);
 };
 
 // ===================== Stats =====================

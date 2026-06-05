@@ -69,9 +69,13 @@ export function FriendsDialog({ user, isOpen, onOpenChange }: FriendsDialogProps
             </div>
           ) : (
             <div className="space-y-2 pr-2">
-              {friends.map((friend) => (
+              {friends.map((friend) => {
+                const friendId = friend._id || friend.id;
+                if (!friendId) return null;
+
+                return (
                 <div
-                  key={friend._id}
+                  key={friendId}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 bg-slate-50 dark:bg-slate-700/30 rounded-lg border border-slate-100 dark:border-slate-700"
                 >
                   <div className="flex items-center gap-3 min-w-0">
@@ -103,7 +107,7 @@ export function FriendsDialog({ user, isOpen, onOpenChange }: FriendsDialogProps
                     className="text-rose-600 border-rose-200 hover:bg-rose-50 hover:text-rose-700 dark:border-rose-900/50 dark:hover:bg-rose-950/40 shrink-0"
                     onClick={() => {
                       if (window.confirm(`Bạn có chắc muốn xóa ${friend.displayName} khỏi danh sách bạn bè của ${user?.displayName}?`)) {
-                        removeFriend(friend._id);
+                        removeFriend(friendId);
                       }
                     }}
                     disabled={isRemoving}
@@ -112,7 +116,8 @@ export function FriendsDialog({ user, isOpen, onOpenChange }: FriendsDialogProps
                     Hủy kết bạn
                   </Button>
                 </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>

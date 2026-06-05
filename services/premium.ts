@@ -130,26 +130,43 @@ const normalizePlan = (raw: unknown): PremiumPlan => {
 const getPremiumOverview = async (): Promise<PremiumOverview> => {
   const { data } = await api.get("/users/premium/overview");
   const payload = pickPayload<Record<string, unknown>>(data);
+  const overview =
+    payload.overview && typeof payload.overview === "object"
+      ? asRecord(payload.overview)
+      : undefined;
+  const directPremium =
+    payload.premium && typeof payload.premium === "object"
+      ? asRecord(payload.premium)
+      : undefined;
+  const overviewPremium =
+    overview?.premium && typeof overview.premium === "object"
+      ? asRecord(overview.premium)
+      : undefined;
 
   const premiumLike =
-    payload?.premium && typeof payload.premium === "object"
-      ? payload.premium
-      : payload?.overview?.premium && typeof payload.overview.premium === "object"
-        ? payload.overview.premium
-        : undefined;
+    directPremium ||
+    overviewPremium ||
+    undefined;
 
-  const root =
-    payload?.overview && typeof payload.overview === "object"
-      ? payload.overview
-      : payload;
+  const root = overview || payload;
+  const rootAccount =
+    root.account && typeof root.account === "object"
+      ? asRecord(root.account)
+      : undefined;
+  const rootAccountId =
+    root.accountId && typeof root.accountId === "object"
+      ? asRecord(root.accountId)
+      : undefined;
+  const rootUser =
+    root.user && typeof root.user === "object"
+      ? asRecord(root.user)
+      : undefined;
+  const rootUserAccountId =
+    rootUser?.accountId && typeof rootUser.accountId === "object"
+      ? asRecord(rootUser.accountId)
+      : undefined;
   const accountLike =
-    (root?.account && typeof root.account === "object" ? root.account : undefined) ||
-    (root?.accountId && typeof root.accountId === "object"
-      ? root.accountId
-      : undefined) ||
-    (root?.user?.accountId && typeof root.user.accountId === "object"
-      ? root.user.accountId
-      : undefined);
+    rootAccount || rootAccountId || rootUserAccountId || undefined;
 
   const merged = {
     ...root,
@@ -196,13 +213,13 @@ const getPremiumOverview = async (): Promise<PremiumOverview> => {
 
   const activePlanRaw =
     (payload?.activePlan && typeof payload.activePlan === "object"
-      ? payload.activePlan
+      ? asRecord(payload.activePlan)
       : undefined) ||
     (root?.activePlan && typeof root.activePlan === "object"
-      ? root.activePlan
+      ? asRecord(root.activePlan)
       : undefined) ||
     (merged?.activePlan && typeof merged.activePlan === "object"
-      ? merged.activePlan
+      ? asRecord(merged.activePlan)
       : undefined);
 
   const activePlanCode =
